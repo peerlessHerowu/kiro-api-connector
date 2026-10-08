@@ -161,5 +161,12 @@ class Tests(unittest.TestCase):
                 self.assertEqual(json.load(response)['app'],'kiro-api-connector')
         finally:server.shutdown();server.server_close()
 
+    def test_local_server_port_cannot_have_two_owners(self):
+        first=app.LocalServer(('127.0.0.1',0),app.handler(self.connector,0))
+        try:
+            with self.assertRaises(OSError):
+                app.LocalServer(first.server_address,app.handler(self.connector,first.server_port))
+        finally:first.server_close()
+
 
 if __name__=='__main__':unittest.main()

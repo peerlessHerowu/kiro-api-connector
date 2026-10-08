@@ -98,6 +98,15 @@ def free_port(port):
         return sock.connect_ex(('127.0.0.1', port)) != 0
 
 
+class LocalServer(ThreadingHTTPServer):
+    allow_reuse_address = False
+
+    def server_bind(self):
+        if os.name=='nt':
+            self.socket.setsockopt(socket.SOL_SOCKET,socket.SO_EXCLUSIVEADDRUSE,1)
+        super().server_bind()
+
+
 class Connector:
     def __init__(self, home, router_port=20148, bridge_port=20149, settings=None):
         self.home = home.resolve()
@@ -561,7 +570,7 @@ def main():
     args=parser.parse_args()
     connector=Connector(args.home)
     try:
-        server=ThreadingHTTPServer(('127.0.0.1',args.port),handler(connector,args.port))
+        server=LocalServer(('127.0.0.1',args.port),handler(connector,args.port))
     except OSError:
         try:
             health=connector.request(f'http://127.0.0.1:{args.port}/health',timeout=2)
