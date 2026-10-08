@@ -1,0 +1,13 @@
+__pycache__/
+*.log
+.local/
+runtime/node_modules/
+runtime/package-lock.json
+runtime/package.json
+config.json
+credentials.local.json
+admin*.json
+*.sqlite*
+endpoint-backup.json
+dist/
+build/

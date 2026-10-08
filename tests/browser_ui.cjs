@@ -1,0 +1,28 @@
+const {chromium}=require('playwright');
+const assert=require('node:assert/strict');
+(async()=>{
+  const browser=await chromium.launch({channel:'chrome',headless:true});
+  const page=await browser.newPage({viewport:{width:1280,height:1100}});
+  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto('http://127.0.0.1:20147');
+  await page.waitForFunction(()=>document.querySelector('#badge').textContent!=='正在检查');
+  assert.equal(await page.title(),'Kiro API Connector');
+  await page.route('**/api/models',route=>route.fulfill({json:{models:['demo-model','<img src=x onerror=alert(1)>']}}));
+  await page.fill('#base','https://example.com/v1');
+  await page.click('#load');
+  await page.waitForFunction(()=>document.querySelectorAll('#models input').length===2);
+  assert.equal(await page.locator('#models img').count(),0);
+  assert.equal(await page.locator('#default option').count(),2);
+  await page.locator('#models input').first().uncheck();
+  assert.equal(await page.locator('#default option').count(),1);
+  await page.locator('summary').first().click();
+  await page.fill('#manual','manual-model');await page.click('#addManual');
+  await page.waitForFunction(()=>document.querySelector('#default').textContent.includes('manual-model'));
+  await page.unroute('**/api/models');
+  await page.reload();
+  await page.waitForFunction(()=>document.querySelector('#badge').textContent!=='正在检查');
+  assert.deepEqual(errors,[]);
+  await page.screenshot({path:process.env.UI_SCREENSHOT||'ui-preview.png',fullPage:true});
+  console.log('PASS: actual UI load, catalog selection, manual model, hostile model text escaped, no page errors');
+  await browser.close();
+})().catch(e=>{console.error(e);process.exitCode=1});

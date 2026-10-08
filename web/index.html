@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kiro API Connector</title>
+<style>
+:root{color-scheme:light;--ink:#172033;--muted:#6b7280;--line:#e3e7ed;--accent:#5b49df}*{box-sizing:border-box}body{margin:0;background:#f6f7fb;font:15px/1.6 system-ui,"Microsoft YaHei",sans-serif;color:var(--ink)}main{max-width:1040px;margin:46px auto;padding:0 24px}header{display:flex;justify-content:space-between;align-items:center;margin-bottom:28px}h1{font-size:28px;letter-spacing:-.6px;margin:0}h2{font-size:18px;margin:0 0 16px}p{margin:6px 0;color:var(--muted)}.badge{padding:6px 13px;border-radius:30px;background:#eeebff;color:var(--accent);font-size:13px}.grid{display:grid;grid-template-columns:1.65fr 1fr;gap:22px}.card{background:white;border:1px solid var(--line);border-radius:16px;padding:25px;margin-bottom:20px}.step{display:inline-flex;align-items:center;justify-content:center;background:#eeebff;color:var(--accent);width:27px;height:27px;border-radius:8px;margin-right:9px}label{display:block;font-size:13px;font-weight:600;margin:17px 0 6px}input,select{font:inherit;width:100%;padding:10px 12px;border:1px solid #d5dae5;border-radius:9px;background:white;color:var(--ink)}input:focus,select:focus{outline:2px solid #b5aaff;outline-offset:1px}button{font:inherit;cursor:pointer;padding:10px 16px;border:1px solid #d8dce5;border-radius:9px;background:white;color:var(--ink)}button.primary{background:var(--accent);border-color:var(--accent);color:white}button:disabled{opacity:.5;cursor:wait}.row{display:flex;gap:10px;flex-wrap:wrap;margin-top:17px}.note{font-size:12px;color:var(--muted)}#models{max-height:250px;overflow:auto;margin-top:14px}.model{display:flex;gap:9px;align-items:center;padding:7px 0;font-weight:400;margin:0}.model input,.check input{width:auto}.check{display:flex;align-items:center;gap:8px;font-weight:400}#message{white-space:pre-wrap;padding:13px 16px;border-radius:9px;background:#eeebff;margin-bottom:20px;display:none}#message.error{background:#fff0ef;color:#9f2727}.detail{display:flex;justify-content:space-between;gap:14px;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px}.path{overflow-wrap:anywhere;font-size:12px;color:var(--muted)}a{color:var(--accent)}details{margin-top:16px}summary{cursor:pointer;color:var(--muted);font-size:13px}@media(max-width:740px){.grid{grid-template-columns:1fr}main{margin-top:24px}header{align-items:flex-start;gap:12px}h1{font-size:23px}}
+</style></head><body><main>
+<header><div><h1>Kiro API Connector</h1><p>连接你的模型，继续在 Kiro 中工作。</p></div><span class="badge" id="badge">正在检查</span></header>
+<div id="message" role="status" aria-live="polite"></div><div class="grid"><section>
+<div class="card"><h2><span class="step">1</span>连接中转站</h2>
+<label for="base">Base URL</label><input id="base" type="url" placeholder="https://example.com/v1" autocomplete="off">
+<label for="key">API key</label><input id="key" type="password" placeholder="输入 API key" autocomplete="new-password">
+<p class="note" id="keyHint">密钥保存在本机，不显示在地址栏中。</p>
+<div class="row"><button id="load">读取可用模型</button></div>
+<div id="models"></div><label for="default">默认模型</label><select id="default"><option value="">先读取模型或手动添加</option></select>
+<details><summary>手动填写模型 / 思考档位</summary>
+<label for="manual">模型 ID（每行一个）</label><textarea id="manual" rows="3" style="width:100%;border:1px solid #d5dae5;border-radius:9px;padding:10px;font:inherit"></textarea><button id="addManual">添加模型</button>
+<label for="efforts">支持思考档位的模型 ID（每行一个）</label><textarea id="efforts" rows="2" style="width:100%;border:1px solid #d5dae5;border-radius:9px;padding:10px;font:inherit" placeholder="请确认供应商支持 low / medium / high / xhigh"></textarea>
+</details><div class="row"><button class="primary" id="save">保存并测试连接</button></div>
+<p class="note">测试会发送一次很短的默认模型请求，可能产生少量费用。</p></div>
+<div class="card"><h2><span class="step">2</span>在 Kiro 中启用</h2><p>测试通过后启用连接。已有其他桥接配置时，会保留原配置并提示。</p>
+<label class="check"><input type="checkbox" id="autostart">登录 Windows 后自动启动</label>
+<div class="row"><button class="primary" id="enable">启用到 Kiro</button><button id="stop">停用并恢复设置</button></div></div>
+</section><aside><div class="card"><h2>运行状态</h2><div id="status"></div><p class="path" id="path"></p>
+<div class="row"><button id="start">启动服务</button><button id="test">重新测试</button></div><div class="row"><button id="usage">查看用量</button><button id="logs">打开日志目录</button></div>
+<details><summary>用量页面的管理密码</summary><p class="note">工具已生成本机专用密码。打开用量页面时可以用它登录。</p><button id="password">显示管理密码</button><input id="admin" type="password" readonly aria-label="管理密码" style="margin-top:10px"></details></div>
+<div class="card"><h2>环境检查</h2><div id="deps"></div><div class="row"><button id="install">安装 kRouter 依赖</button></div><p class="note" id="envNote">需要 Python 3.11+、Node.js 22.17+。安装按钮从 npm 下载固定版本，不改动全局安装。</p></div>
+<p class="note">保持工具后台运行即可。关闭网页不会停止服务。</p></aside></div></main>
+<script>
+const token='__TOKEN__', $=id=>document.getElementById(id);let state={}, manual=false;
+async function api(path,body){const response=await fetch('/api/'+path,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json','X-Setup-Token':token},...(body===undefined?{}:{body:JSON.stringify(body)})});const result=await response.json();if(!response.ok)throw Error(result.error||'请求失败');return result}
+function message(text,error=false){$('message').textContent=text;$('message').classList.toggle('error',error);$('message').style.display='block'}
+function showModels(ids,selected=ids){const target=$('models');target.replaceChildren();for(const id of ids){const label=document.createElement('label');label.className='model';const input=document.createElement('input');input.type='checkbox';input.value=id;input.checked=selected.includes(id);input.onchange=defaults;label.append(input,document.createTextNode(id));target.append(label)}defaults()}
+function selected(){return [...$('models').querySelectorAll('input:checked')].map(x=>x.value)}
+function defaults(){const old=$('default').value;$('default').replaceChildren();for(const id of selected()){const option=document.createElement('option');option.value=id;option.textContent=id;$('default').append(option)}if(selected().includes(old))$('default').value=old}
+function detail(target,name,value){const row=document.createElement('div');row.className='detail';const key=document.createElement('span'), val=document.createElement('span');key.textContent=name;val.textContent=value;row.append(key,val);target.append(row)}
+async function refresh(initial=false){state=await api('status');$('badge').textContent=state.enabled&&state.running.bridge?'已启用':state.configured?'已配置':'等待配置';$('status').replaceChildren();detail($('status'),'桥接服务',state.running.bridge?'运行中':'未运行');detail($('status'),'Kiro 连接',state.enabled?'已接入':'未接入');detail($('status'),'最近测试',state.lastTest?.time||'尚未通过');$('path').textContent='';$('deps').replaceChildren();detail($('deps'),'Node.js',state.dependencies.sqlite?'可用':'需安装22.17+');detail($('deps'),'kRouter',state.dependencies.routerApp?'0.5.163 已就绪':'未安装');$('envNote').textContent=state.dependencies.bundled?'便携版已包含所需运行环境，无需另外安装 Python 或 Node.js。':'需要 Python 3.11+、Node.js 22.17+。安装按钮从 npm 下载固定版本，不改动全局安装。';$('install').style.display=state.dependencies.ready?'none':'';if(initial)$('autostart').checked=state.autostart;if(initial&&state.configured){$('base').value=state.config.baseUrl;showModels(state.config.models);$('default').value=state.config.defaultModel;$('efforts').value=state.config.effortModels.join('\n');$('key').placeholder='已保存，留空保留当前 key';$('keyHint').textContent='留空保留当前密钥，填写新值即可更换。'}}
+function action(id,fn){$(id).onclick=async()=>{document.querySelectorAll('button').forEach(b=>b.disabled=true);try{await fn();await refresh()}catch(error){message(error.message,true)}finally{document.querySelectorAll('button').forEach(b=>b.disabled=false)}}}
+action('load',async()=>{const result=await api('models',{baseUrl:$('base').value,apiKey:$('key').value});showModels(result.models);manual=false;message('已读取模型，请选择需要在 Kiro 中显示的模型。')});
+action('addManual',async()=>{const ids=[...new Set([...selected(),...$('manual').value.split('\n').map(x=>x.trim()).filter(Boolean)])];showModels(ids);manual=true;message('已添加模型，保存时将通过实际推理验证默认模型。')});
+action('save',async()=>{message('正在保存并测试，请稍候…');await api('configure',{baseUrl:$('base').value,apiKey:$('key').value,models:selected(),defaultModel:$('default').value,manualModels:manual,effortModels:$('efforts').value.split('\n').map(x=>x.trim()).filter(Boolean)});$('key').value='';$('key').placeholder='已保存，留空保留当前 key';message('默认模型回复和 Kiro 协议测试通过，现在可以启用。')});
+action('enable',async()=>{await api('enable',{});await api('autostart',{enabled:$('autostart').checked});message('已启用。请在 Kiro 中检查模型列表；必要时重新加载窗口。')});
+action('stop',async()=>{await api('autostart',{enabled:false});await api('stop',{});message('已停用并恢复 Kiro endpoint 设置。')});
+action('start',async()=>{await api('start',{});message('服务已启动。')});action('test',async()=>{await api('test',{});message('实际推理测试通过。')});
+action('logs',async()=>{await api('open-logs',{})});action('install',async()=>{message('正在下载并安装依赖，请稍候…');await api('install',{});message('依赖已就绪。')});
+action('password',async()=>{$('admin').value=(await api('admin-password',{})).password;$('admin').type='text'});
+$('usage').onclick=()=>window.open(state.dashboard,'_blank','noopener');refresh(true).catch(e=>message(e.message,true));
+</script></body></html>

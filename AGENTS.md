@@ -1,0 +1,3 @@
+# Kiro API Connector
+
+Use Python standard library and reuse the pinned kRouter adapter. Do not modify an installed Kiro client or a global kRouter package. Never use the user's active bridge services as writable test fixtures. Test with a separate data directory, separate ports and a fake Kiro settings file. Credentials and runtime databases belong outside the repository and must not appear in commits, tests, screenshots or reports. Honor the current user's document-delivery preference; investigation reports belong outside the source root. Keep the repository README self-contained for users on other computers.
