@@ -4,7 +4,20 @@
 
 ## 普通用户：使用便携包
 
-下载项目提供的 Windows x64 便携包并完整解压，双击 **打开配置向导.cmd**。便携包包含 Python、Node.js 和固定版本 kRouter，无需另外安装这些运行环境，也无需 skill。
+下载项目提供的 Windows x64 便携包并完整解压，双击 **打开配置向导.cmd**。便携包包含 Python、Node.js 和固定版本 kRouter，无需另外安装这些运行环境，也无需 skill。此 Windows 便携包不能在 Mac 上运行；Mac 用户按下面的源码方式部署。
+
+## macOS 用户
+
+已增加 macOS 路径、后台启动、LaunchAgent 登录自启及打开日志目录支持，适用于源码部署。Apple Silicon 和 Intel 均使用各自系统安装的 Node/Python；当前尚无 Mac 便携包、签名 App 或 DMG，也未完成 Mac 原生 Kiro 的实机验收。
+
+1. 安装并正常登录 macOS 版 Kiro。
+2. 安装 Python 3.11+、Node.js 22.17+。如果已使用 Homebrew，可执行 `brew install python node`。
+3. 克隆项目后双击 **打开配置向导.command**；如果下载的文件没有执行权限，执行 `chmod +x 打开配置向导.command`，然后运行 `./打开配置向导.command`。也可在终端直接执行 `python3 app.py`，此时需保持终端运行。
+4. 在向导中安装固定版本 kRouter 依赖，再填地址/key、选择模型、保存测试并启用，与 Windows 的配置流程相同。
+
+Mac 数据目录为 `~/Library/Application Support/KiroApiConnector`，Kiro 设置路径为 `~/Library/Application Support/Kiro/User/settings.json`。登录自启项为 `~/Library/LaunchAgents/club.kiro-api-connector.plist`，下次登录后由 launchd 启动；没有执行强制注销或系统重启测试。日志目录按钮使用 Finder 打开。
+
+Windows 管理密码使用 DPAPI；Mac 管理密码保存在仅本用户可访问的 0700 数据目录和 0600 文件中，**不是 Keychain 加密**。配置和运行数据库都属于本机私密数据，不可跨系统复制或分享。其余协议、版本和现有桥接保护限制仍适用。
 
 首次配置：
 
@@ -19,7 +32,7 @@
 
 ## 从 GitHub 克隆或复制源码
 
-源码版需要 Windows、Python 3.11+ 和支持 `node:sqlite` 的 Node.js（建议 22.17+）。先安装这两个运行环境；然后克隆仓库或解压干净的源码包，双击 **打开配置向导.cmd**。也可以执行：
+源码版支持 Windows 与 macOS，需要 Python 3.11+ 和支持 `node:sqlite` 的 Node.js（建议 22.17+）。先安装这两个运行环境；然后克隆仓库或解压干净的源码包，Windows 双击 **打开配置向导.cmd**，Mac 使用 **打开配置向导.command**。也可以执行：
 
 ```powershell
 python app.py
@@ -47,7 +60,7 @@ python app.py
 - 思考档位需供应商支持。仅为确认支持的模型填写档位设置；不能凭模型名称推断能力。
 - 不需要复制或修改正常 Kiro 客户端。本项目不包含独立测试客户端的排队或模型分组补丁。
 
-每台电脑在自己的 Windows 用户目录保存数据：`%LOCALAPPDATA%\KiroApiConnector`。日志、数据库、key 和管理密码都不能作为分享内容。
+每台电脑在自己的用户目录保存数据：Windows 为 `%LOCALAPPDATA%\KiroApiConnector`，Mac 为 `~/Library/Application Support/KiroApiConnector`。日志、数据库、key 和管理密码都不能作为分享内容。
 
 ## 分享与发布
 

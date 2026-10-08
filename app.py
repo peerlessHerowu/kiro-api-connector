@@ -1,10 +1,11 @@
-"""Windows local setup wizard for Kiro's API-key bridge. Python standard library only."""
+"""Windows/macOS local setup wizard for Kiro's API-key bridge. Standard library only."""
 import argparse
 import base64
 import ctypes
 import http.cookiejar
 import json
 import os
+import plistlib
 from pathlib import Path
 import secrets
 import shutil
@@ -31,10 +32,27 @@ class RequestFailure(RuntimeError):
         super().__init__(f'请求失败：HTTP {status}，请检查地址、凭据或模型权限。')
 
 
+def user_paths():
+    if sys.platform=='darwin':
+        support=Path.home()/'Library/Application Support'
+        return support/'KiroApiConnector', support/'Kiro/User/settings.json'
+    if os.name=='nt':
+        return Path(os.environ['LOCALAPPDATA'])/'KiroApiConnector', Path(os.environ['APPDATA'])/'Kiro/User/settings.json'
+    raise RuntimeError('当前支持 Windows 与 macOS。')
+
+
+def startup_path():
+    if sys.platform=='darwin':
+        return Path.home()/'Library/LaunchAgents/club.kiro-api-connector.plist'
+    return Path(os.environ['APPDATA'])/'Microsoft/Windows/Start Menu/Programs/Startup/KiroApiConnector.cmd'
+
+
 def write_json(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
     temp = path.with_suffix(path.suffix + '.tmp')
-    temp.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding='utf8')
+    with os.fdopen(os.open(temp,os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600),'w',encoding='utf8') as handle:
+        if os.name!='nt':os.fchmod(handle.fileno(),0o600)
+        handle.write(json.dumps(value, ensure_ascii=False, indent=2))
     temp.replace(path)
 
 
@@ -50,6 +68,13 @@ def validate_url(value):
 
 
 def dpapi(value, decrypt=False):
+    if sys.platform=='darwin':
+        # macOS secrets live in a 0700 directory and 0600 files; this is not encryption.
+        prefix='owner-file:'
+        if decrypt:
+            if not value.startswith(prefix):raise RuntimeError('无法读取其他系统的管理密码，请在本机重新配置。')
+            return base64.b64decode(value[len(prefix):]).decode()
+        return prefix+base64.b64encode(value.encode()).decode()
     if os.name != 'nt':
         raise RuntimeError('凭据保护仅支持 Windows。')
     class Blob(ctypes.Structure):
@@ -77,10 +102,11 @@ class Connector:
     def __init__(self, home, router_port=20148, bridge_port=20149, settings=None):
         self.home = home.resolve()
         self.home.mkdir(parents=True, exist_ok=True)
+        if sys.platform=='darwin':self.home.chmod(0o700)
         self.config_file = self.home / 'config.json'
         self.data = self.home / 'router'
         self.router_port, self.bridge_port = router_port, bridge_port
-        self.settings = settings or Path(os.environ['APPDATA']) / 'Kiro/User/settings.json'
+        self.settings = settings or user_paths()[1]
         self.backup = self.home / 'endpoint-backup.json'
         self.processes = {}
         self.lock = threading.RLock()
@@ -98,13 +124,18 @@ class Connector:
         self.token = secrets.token_urlsafe(32)
 
     def dependencies(self):
-        bundled_node = ROOT / 'runtime/bin/node.exe'
+        bundled_node = ROOT / ('runtime/bin/node.exe' if os.name=='nt' else 'runtime/bin/node')
+        extra_paths = [Path('/opt/homebrew/bin'),Path('/usr/local/bin')] if sys.platform=='darwin' else []
         node = str(bundled_node) if bundled_node.exists() else shutil.which('node')
+        node = node or next((str(p/'node') for p in extra_paths if (p/'node').exists()),None)
         npm = shutil.which('npm.cmd') or shutil.which('npm')
+        npm = npm or next((str(p/'npm') for p in extra_paths if (p/'npm').exists()),None)
         app = ROOT / 'runtime/node_modules/@sifxprime/krouter/app'
         if not (app / 'custom-server.js').exists() and npm:
             try:
-                global_root = subprocess.check_output([npm, 'root', '-g'], text=True, creationflags=FLAGS).strip()
+                npm_env=dict(os.environ)
+                if node:npm_env['PATH']=str(Path(node).parent)+os.pathsep+npm_env.get('PATH','')
+                global_root = subprocess.check_output([npm, 'root', '-g'], text=True, creationflags=FLAGS,env=npm_env).strip()
                 app = Path(global_root) / '@sifxprime/krouter/app'
             except subprocess.SubprocessError:
                 pass
@@ -405,9 +436,26 @@ class Connector:
                 'enabled':self.backup.exists(),'lastTest':self.last_test,
                 'dashboard':f'http://127.0.0.1:{self.router_port}/dashboard/usage',
                 'dataDir':str(self.home), 'dependencies':self.dependencies(),'lastError':self.last_error,
-                'autostart':(Path(os.environ['APPDATA'])/'Microsoft/Windows/Start Menu/Programs/Startup/KiroApiConnector.cmd').exists()}
+                'platform':sys.platform,'autostart':startup_path().exists()}
 
     def autostart(self, enabled):
+        if sys.platform=='darwin':
+            startup=startup_path()
+            command=[sys.executable,str(ROOT/'app.py'),'--home',str(self.home),'--no-browser']
+            if startup.exists():
+                old=plistlib.loads(startup.read_bytes())
+                if old.get('ProgramArguments')!=command:
+                    raise RuntimeError('自启项不属于当前安装，未修改。')
+            if enabled:
+                startup.parent.mkdir(parents=True,exist_ok=True)
+                plist={'Label':'club.kiro-api-connector','ProgramArguments':command,'RunAtLoad':True,
+                       'WorkingDirectory':str(ROOT),'EnvironmentVariables':{'PATH':os.environ.get('PATH','')+':/opt/homebrew/bin:/usr/local/bin'},
+                       'StandardOutPath':str(self.home/'startup.log'),'StandardErrorPath':str(self.home/'startup.log')}
+                with startup.open('wb') as handle:plistlib.dump(plist,handle)
+                startup.chmod(0o600)
+            else:
+                startup.unlink(missing_ok=True)
+            return {'autostart':enabled}
         startup = Path(os.environ['APPDATA'])/'Microsoft/Windows/Start Menu/Programs/Startup/KiroApiConnector.cmd'
         if enabled:
             pythonw = Path(sys.executable).with_name('pythonw.exe')
@@ -431,6 +479,7 @@ class Connector:
         if deps['ready']:
             return deps
         env = {k:v for k,v in os.environ.items() if k.upper() not in ('HTTP_PROXY','HTTPS_PROXY','ALL_PROXY','NO_PROXY')}
+        env['PATH']=str(Path(deps['node']).parent)+os.pathsep+env.get('PATH','')
         with (self.home/'install.log').open('ab') as log:
             result = subprocess.run([deps['npm'],'install','--prefix',str(ROOT/'runtime'),
                      '@sifxprime/krouter@0.5.163'],env=env,stdout=log,stderr=log,
@@ -489,7 +538,10 @@ def handler(connector, port):
                     elif self.path=='/api/autostart': result=connector.autostart(bool(body['enabled']))
                     elif self.path=='/api/install': result=connector.install()
                     elif self.path=='/api/admin-password': result={'password':dpapi(read_json(connector.home/'admin.json')['protected'],True)}
-                    elif self.path=='/api/open-logs': os.startfile(connector.home);result={'ok':True}
+                    elif self.path=='/api/open-logs':
+                        if sys.platform=='darwin':subprocess.Popen(['open',str(connector.home)])
+                        else:os.startfile(connector.home)
+                        result={'ok':True}
                     else: return self.send(404,{'error':'Not found'})
                 self.send(200,result)
             except (RuntimeError,ValueError) as error:
@@ -500,8 +552,10 @@ def handler(connector, port):
 
 
 def main():
+    if sys.version_info < (3,11):
+        raise RuntimeError('需要 Python 3.11+，请更新 Python 后重新打开。')
     parser=argparse.ArgumentParser()
-    parser.add_argument('--home',type=Path,default=Path(os.environ.get('LOCALAPPDATA',str(ROOT)))/'KiroApiConnector')
+    parser.add_argument('--home',type=Path,default=user_paths()[0])
     parser.add_argument('--port',type=int,default=20147)
     parser.add_argument('--no-browser',action='store_true')
     args=parser.parse_args()

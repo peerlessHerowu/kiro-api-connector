@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import os
+import plistlib
 from pathlib import Path
 import tempfile
 import threading
@@ -112,7 +113,26 @@ class Tests(unittest.TestCase):
         with zipfile.ZipFile(output) as archive:
             self.assertFalse(any('node_modules' in n or '.local' in n or 'config.json' in n or 'credentials' in n for n in archive.namelist()))
             self.assertTrue(all(b'fake-secret-only' not in archive.read(n) for n in archive.namelist()))
+            self.assertEqual(archive.getinfo('kiro-api-connector/打开配置向导.command').external_attr>>16,0o100755)
         with self.assertRaises(FileExistsError):export.build(output,root)
+
+    def test_macos_paths_and_launchagent(self):
+        with patch.object(app.sys,'platform','darwin'),patch.object(app.Path,'home',return_value=self.home):
+            home,settings=app.user_paths()
+            self.assertEqual(home,self.home/'Library/Application Support/KiroApiConnector')
+            self.assertEqual(settings,self.home/'Library/Application Support/Kiro/User/settings.json')
+            self.connector.autostart(True)
+            path=app.startup_path();plist=plistlib.loads(path.read_bytes())
+            self.assertTrue(plist['RunAtLoad'])
+            self.assertIn('--no-browser',plist['ProgramArguments'])
+            self.assertIn('/opt/homebrew/bin',plist['EnvironmentVariables']['PATH'])
+            self.connector.autostart(False);self.assertFalse(path.exists())
+
+    def test_macos_secret_format_rejects_windows_cipher(self):
+        with patch.object(app.sys,'platform','darwin'):
+            protected=app.dpapi('fake-mac-admin')
+            self.assertEqual(app.dpapi(protected,True),'fake-mac-admin')
+            with self.assertRaisesRegex(RuntimeError,'其他系统'):app.dpapi('windows-cipher',True)
 
     @unittest.skipUnless(os.name=='nt','Windows DPAPI')
     def test_local_secret_protection(self):
