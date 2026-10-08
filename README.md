@@ -57,7 +57,7 @@ python app.py
 - 当前使用独立端口 20147/20148/20149；如果 Kiro 已接入其他自定义桥接，启用会拒绝覆盖。先在当前任务结束后停用原桥接、恢复设置，再启用此工具。
 - 需要正常登录 Kiro；这不是登录绕过工具。当前主要实现 OpenAI Chat Completions 兼容接口，不能保证任意中转站或任意 Kiro 版本兼容。
 - 当前自动写设置仅支持严格 JSON。Kiro settings.json 含 JSONC 注释或尾逗号时会拒绝修改并保留原文件。
-- 思考档位需供应商支持。仅为确认支持的模型填写档位设置；不能凭模型名称推断能力。
+- 向导默认给 GPT-6 系列填写思考档位模型列表，提供 Low / Medium / High / Extra High（low / medium / high / xhigh）。其他模型可手动添加；实际支持由中转站决定，不支持的模型请从该列表移除。已有空列表配置刷新向导后需重新保存，Kiro 重新加载后生效。
 - 不需要复制或修改正常 Kiro 客户端。本项目不包含独立测试客户端的排队或模型分组补丁。
 
 每台电脑在自己的用户目录保存数据：Windows 为 `%LOCALAPPDATA%\KiroApiConnector`，Mac 为 `~/Library/Application Support/KiroApiConnector`。日志、数据库、key 和管理密码都不能作为分享内容。
