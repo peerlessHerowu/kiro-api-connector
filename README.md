@@ -67,7 +67,7 @@ chmod +x setup.sh
 - 需要正常登录 Kiro；这不是登录绕过工具。当前主要实现 OpenAI Chat Completions 兼容接口，不能保证任意中转站或任意 Kiro 版本兼容。
 - 当前自动写设置仅支持严格 JSON。Kiro settings.json 含 JSONC 注释或尾逗号时会拒绝修改并保留原文件。
 - 向导默认给 GPT-6 系列填写思考档位模型列表，提供 Low / Medium / High / Extra High（low / medium / high / xhigh）。其他模型可手动添加；实际支持由中转站决定，不支持的模型请从该列表移除。已有空列表配置刷新向导后需重新保存，Kiro 重新加载后生效。
-- 向导中的“上下文预算”默认是 200000 token。桥接会把实际/估算使用量转换为 Kiro 的 `contextUsageEvent`，让 Kiro 在约 80% 时摘要、约 95% 时截断；超大的工具结果会先缩短。它是本地保护预算，不是模型官方上下文上限，可按中转站实际能力调整。kRouter 本身只转发请求，不负责 Kiro 的压缩策略。
+- 向导中的“上下文预算”默认是 200000 token。桥接会把实际/估算使用量转换为 Kiro 的 `contextUsageEvent`，让 Kiro 在约 80% 时摘要、约 95% 时截断；超大的工具结果会先缩短。Kiro 将原始历史合并为单条摘要提示时也会检查长度：估算超出预算的 90% 后，缩短到约 75%，保留摘要指令和近期内容并标明省略；省略内容需重新读取，不能当作完整压缩。这是本地保护预算，不是模型官方上下文上限，可按中转站实际能力调整。kRouter 本身只转发请求，不负责 Kiro 的压缩策略。
 - 不需要复制或修改正常 Kiro 客户端。本项目不包含独立测试客户端的排队或模型分组补丁。
 
 每台电脑在自己的用户目录保存数据：Windows 为 `%LOCALAPPDATA%\KiroApiConnector`，Mac 为 `~/Library/Application Support/KiroApiConnector`。日志、数据库、key 和管理密码都不能作为分享内容。

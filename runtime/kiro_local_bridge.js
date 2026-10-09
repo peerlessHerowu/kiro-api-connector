@@ -74,9 +74,9 @@ async function start() {
     throw new Error('Installed kRouter context converter layout changed');
   }
   source = source.replace(preparation,
-    'let contextBudget=connectorContext.budget(connectorConfig,r.slice(connectorConfig.prefix.length+1)),contextClipped=connectorContext.protectMessages(s,contextBudget);let i=Dd(n),o={model:r,messages:s,stream:!0,...n.reasoning_effort?{reasoning_effort:n.reasoning_effort}:{},')
+    'let contextBudget=connectorContext.budget(connectorConfig,r.slice(connectorConfig.prefix.length+1)),contextClipped=connectorContext.protectMessages(s,contextBudget),summaryClipped=!!s.connectorSummaryClipped;contextClipped&&console.log(`context_protection_clipped=${contextClipped} estimated=${connectorContext.estimate(s)} budget=${contextBudget} summary=${summaryClipped}`);let i=Dd(n),o={model:r,messages:s,stream:!0,...n.reasoning_effort?{reasoning_effort:n.reasoning_effort}:{},')
     .replace(stateMarker,
-      'l=Wo(r);Object.assign(l,{contextBudget,contextClipped,inputEstimate:connectorContext.estimate(o)});await Bd(u,t,Ud,l)')
+      'l=Wo(r);Object.assign(l,{contextBudget,contextClipped,summaryClipped,inputEstimate:connectorContext.estimate(o)});await Bd(u,t,Ud,l)')
     .replace(usageMarker,
       'if(e.usage&&t.finishSent){t.usage=e.usage;return ot("contextUsageEvent",{contextUsagePercentage:connectorContext.usage(t)})}let a=[],r=e.choices?.[0],n=r?.delta||{};');
   const boundary = source.indexOf('var _u=require("https"),eh=require("http2")');
