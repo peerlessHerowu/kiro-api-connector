@@ -7,6 +7,7 @@ import json
 import os
 import plistlib
 from pathlib import Path
+import re
 import secrets
 import shutil
 import socket
@@ -100,6 +101,46 @@ def dpapi(value, decrypt=False):
 def free_port(port):
     with socket.socket() as sock:
         return sock.connect_ex(('127.0.0.1', port)) != 0
+
+
+def takeover_existing(port):
+    """Gracefully stop this tool's existing wizard before switching installations."""
+    if os.name != 'nt':
+        raise RuntimeError('已有配置向导正在运行，请先关闭它。')
+    try:
+        with urllib.request.urlopen(f'http://127.0.0.1:{port}/', timeout=2) as response:
+            page = response.read().decode('utf8', 'replace')
+        match = re.search(r"const token='([^']+)'", page)
+        if not match or 'Kiro API Connector' not in page:
+            raise RuntimeError('配置端口已被其他本地程序占用，未停止。')
+        answer = ctypes.windll.user32.MessageBoxW(
+            None, '检测到已有 Kiro API Connector。是否停止旧向导并切换到当前版本？',
+            'Kiro API Connector', 0x24)
+        if answer != 6:
+            raise RuntimeError('已取消切换，旧向导保持运行。')
+        request = urllib.request.Request(
+            f'http://127.0.0.1:{port}/api/stop', data=b'{}', method='POST',
+            headers={'Content-Type':'application/json','Origin':f'http://127.0.0.1:{port}',
+                     'X-Setup-Token':match.group(1)})
+        with urllib.request.urlopen(request, timeout=15):
+            pass
+        output = subprocess.check_output(['netstat','-ano','-p','tcp'], text=True,
+                                         stderr=subprocess.DEVNULL, creationflags=FLAGS)
+        pids = set()
+        for line in output.splitlines():
+            fields = line.split()
+            if len(fields) >= 5 and fields[1].endswith(':' + str(port)) and fields[3] == 'LISTENING':
+                pids.add(fields[4])
+        for pid in pids:
+            subprocess.run(['taskkill','/PID',pid,'/T','/F'], check=False,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           creationflags=FLAGS)
+        for _ in range(40):
+            if free_port(port): return
+            time.sleep(.25)
+        raise RuntimeError('旧向导已停止，但配置端口仍被占用。')
+    except urllib.error.URLError:
+        raise RuntimeError('已有程序占用配置端口，未能确认它是本工具。') from None
 
 
 class LocalServer(ThreadingHTTPServer):
@@ -600,11 +641,18 @@ def main():
     parser.add_argument('--home',type=Path,default=user_paths()[0])
     parser.add_argument('--port',type=int,default=20147)
     parser.add_argument('--no-browser',action='store_true')
+    parser.add_argument('--takeover',action='store_true')
     args=parser.parse_args()
     connector=Connector(args.home)
     try:
         server=LocalServer(('127.0.0.1',args.port),handler(connector,args.port))
     except OSError:
+        if args.takeover:
+            takeover_existing(args.port)
+            server=LocalServer(('127.0.0.1',args.port),handler(connector,args.port))
+        else:
+            server=None
+    if server is None:
         try:
             health=connector.request(f'http://127.0.0.1:{args.port}/health',timeout=2)
             if health.get('app')=='kiro-api-connector':
