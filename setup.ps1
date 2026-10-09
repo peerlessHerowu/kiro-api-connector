@@ -1,11 +1,17 @@
-param([switch]$Update)
+param([switch]$Update, [switch]$Restart)
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 
 if ($Update) {
   if (-not (Get-Command git -ErrorAction SilentlyContinue)) { throw '更新源码需要 Git；也可以重新下载最新源码包。' }
-  if ((git status --porcelain) -ne '') { throw '源码目录有未提交修改，请先处理后再更新。' }
+  $changes = git status --porcelain
+  if ($LASTEXITCODE -ne 0) { throw '当前目录不是可更新的 Git 仓库。' }
+  if ($changes) { throw '源码目录有未提交修改，请先处理后再更新。' }
   git pull --ff-only
+  if ($LASTEXITCODE -ne 0) { throw '源码更新失败，未切换运行中的服务。请检查网络和仓库权限。' }
+  # Execute the newly downloaded script rather than the old in-memory version.
+  & $PSCommandPath -Restart
+  exit
 }
 
 function Find-Python {
@@ -42,7 +48,7 @@ if (-not $nodeReady) {
 if ($LASTEXITCODE -ne 0) { throw 'kRouter 依赖安装失败，请查看本机 install.log。' }
 
 Write-Host '正在启动配置向导。已有配置会保留，不会覆盖其他 Kiro 设置。'
-if ($Update) {
+if ($Restart) {
   & $python app.py --takeover
 } else {
   & $python app.py

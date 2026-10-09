@@ -40,9 +40,30 @@ class Tests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'HTTP 404'):
                 self.connector.update()
 
-    def test_setup_update_uses_takeover(self):
-        self.assertIn('app.py --takeover', (Path(__file__).parents[1] / 'setup.ps1').read_text(encoding='utf-8-sig'))
-        self.assertIn('app.py --takeover', (Path(__file__).parents[1] / 'setup.sh').read_text(encoding='utf-8'))
+    def test_update_shutdown_preserves_kiro_connection(self):
+        self.connector.apply()
+        settings = self.settings.read_bytes()
+        backup = self.connector.backup.read_bytes()
+        self.connector.wanted = True
+        server = ThreadingHTTPServer(('127.0.0.1',0),app.handler(self.connector,0))
+        port = server.server_port
+        server.RequestHandlerClass = app.handler(self.connector,port)
+        thread = threading.Thread(target=server.serve_forever,daemon=True)
+        thread.start()
+        try:
+            request = urllib.request.Request(f'http://127.0.0.1:{port}/api/shutdown',
+                data=b'{}', headers={'X-Setup-Token':self.connector.token})
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            with opener.open(request,timeout=5) as response:
+                self.assertEqual(json.load(response), {'ok':True})
+            thread.join(timeout=5)
+            self.assertFalse(thread.is_alive())
+            self.assertFalse(self.connector.wanted)
+            self.assertTrue(self.connector.shutting_down)
+            self.assertEqual(self.settings.read_bytes(), settings)
+            self.assertEqual(self.connector.backup.read_bytes(), backup)
+        finally:
+            server.shutdown(); server.server_close()
 
     def test_invalid_model_catalog_has_actionable_error(self):
         self.connector.request=lambda *args,**kwargs: {'data':'not-a-list'}

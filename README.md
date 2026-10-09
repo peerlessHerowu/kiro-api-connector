@@ -86,7 +86,7 @@ python build_source.py --output C:\output\kiro-api-connector-source.zip
 
 便携包用户第一次需要换到带有“升级到最新版.cmd”的新版包；以后可以双击它，或在配置页点击“检查更新并应用”，从 GitHub 下载程序文件。它只更新 `app.py`、网页和桥接脚本，保留本机 API key、kRouter 数据库、Kiro 设置和日志，并重启自己的桥接。旧包没有这个入口，不能凭空获得升级功能。
 
-源码用户不要反复发送压缩包：在项目目录运行 `powershell -ExecutionPolicy Bypass -File .\setup.ps1 -Update`，macOS 运行 `./setup.sh --update`。脚本会先检查工作区干净，再执行 `git pull --ff-only`；更新后会接管旧的本工具向导并启动新代码，已有本机数据、API key、kRouter 数据库和 Kiro 设置会保留。没有 `--Update` / `--update` 时，只使用当前目录已有代码，不会自动更新。
+源码用户不要反复发送压缩包：在项目目录运行 `powershell -ExecutionPolicy Bypass -File .\setup.ps1 -Update`，macOS 运行 `./setup.sh --update`。脚本会先检查工作区干净，再执行 `git pull --ff-only`；更新后会接管旧的本工具向导并启动新代码，已有本机数据、API key、kRouter 数据库和 Kiro 设置会保留。已启用的 Kiro endpoint 会在新桥接通过实际推理测试后继续接管；若测试失败，会保留配置页供手动恢复。没有 `--Update` / `--update` 时，只使用当前目录已有代码，不会自动更新。
 
 源码导出使用文件白名单，不包含本机运行环境、缓存、数据库和凭据。分享原始便携 zip 也可以；接收者在自己电脑填写配置，不需要作者的登录状态或配置文件。不要移动已经注册自启的安装目录，移动后应重新注册。
 

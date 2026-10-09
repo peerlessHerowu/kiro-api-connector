@@ -111,6 +111,11 @@ def takeover_existing(port):
         match = re.search(r"const token='([^']+)'", page)
         if not match or 'Kiro API Connector' not in page:
             raise RuntimeError('配置端口已被其他本地程序占用，未停止。')
+        status_request = urllib.request.Request(
+            f'http://127.0.0.1:{port}/api/status',
+            headers={'X-Setup-Token':match.group(1)})
+        with urllib.request.urlopen(status_request, timeout=5) as response:
+            old_status = json.loads(response.read())
         if os.name == 'nt':
             answer = ctypes.windll.user32.MessageBoxW(
                 None, '检测到已有 Kiro API Connector。是否停止旧向导并切换到当前版本？',
@@ -118,9 +123,21 @@ def takeover_existing(port):
             if answer != 6:
                 raise RuntimeError('已取消切换，旧向导保持运行。')
         request = urllib.request.Request(
-            f'http://127.0.0.1:{port}/api/stop', data=b'{}', method='POST',
+            f'http://127.0.0.1:{port}/api/shutdown', data=b'{}', method='POST',
             headers={'Content-Type':'application/json','Origin':f'http://127.0.0.1:{port}',
                      'X-Setup-Token':match.group(1)})
+        try:
+            with urllib.request.urlopen(request, timeout=15):
+                pass
+            for _ in range(80):
+                if free_port(port): return False
+                time.sleep(.25)
+            raise RuntimeError('旧向导退出超时，请检查日志；未强制结束。')
+        except urllib.error.HTTPError as error:
+            if error.code != 404: raise
+        # Older versions only offer Stop, which restores endpoints. The new
+        # instance must verify inference before enabling the connection again.
+        request.full_url = f'http://127.0.0.1:{port}/api/stop'
         with urllib.request.urlopen(request, timeout=15):
             pass
         if os.name == 'nt':
@@ -143,7 +160,7 @@ def takeover_existing(port):
             for pid in {x.strip() for x in output.splitlines() if x.strip().isdigit()}:
                 os.kill(int(pid), 15)
         for _ in range(40):
-            if free_port(port): return
+            if free_port(port): return bool(old_status.get('enabled'))
             time.sleep(.25)
         raise RuntimeError('旧向导已停止，但配置端口仍被占用。')
     except urllib.error.URLError:
@@ -176,6 +193,7 @@ class Connector:
         self.configuration_mutated = False
         self.wanted = False
         self.last_error = None
+        self.shutting_down = False
         self.config = read_json(self.config_file, {})
         if self.config:
             self.router_port = self.config['routerPort']
@@ -502,6 +520,16 @@ class Connector:
             self.last_test = None
             return self.status()
 
+    def shutdown(self):
+        """Stop owned services for an update; keep Kiro endpoints and backup."""
+        with self.lock:
+            self.shutting_down = True
+            self.wanted = False
+            self.stop_bridge()
+            proc = self.processes.pop('router', None)
+            if proc and proc.poll() is None:
+                proc.terminate(); proc.wait(timeout=10)
+
     def update(self):
         if not self.dependencies()['bundled']:
             raise RuntimeError('源码目录请执行 git pull --ff-only，再运行 setup.ps1 或 setup.sh。')
@@ -626,6 +654,9 @@ def handler(connector, port):
                     elif self.path=='/api/enable': result=connector.apply()
                     elif self.path=='/api/start': connector.start_bridge();result=connector.status()
                     elif self.path=='/api/stop': result=connector.stop()
+                    elif self.path=='/api/shutdown':
+                        connector.shutdown(); result={'ok':True}
+                        threading.Thread(target=self.server.shutdown,daemon=True).start()
                     elif self.path=='/api/autostart': result=connector.autostart(bool(body['enabled']))
                     elif self.path=='/api/update': result=connector.update()
                     elif self.path=='/api/install': result=connector.install()
@@ -653,11 +684,12 @@ def main():
     parser.add_argument('--takeover',action='store_true')
     args=parser.parse_args()
     connector=Connector(args.home)
+    reenable = False
     try:
         server=LocalServer(('127.0.0.1',args.port),handler(connector,args.port))
     except OSError:
         if args.takeover:
-            takeover_existing(args.port)
+            reenable = takeover_existing(args.port)
             server=LocalServer(('127.0.0.1',args.port),handler(connector,args.port))
         else:
             server=None
@@ -672,8 +704,13 @@ def main():
             pass
         raise RuntimeError('配置界面端口已被占用，请检查既有工具实例。') from None
     if connector.config:
-        try: connector.start_bridge()
-        except Exception: pass  # Status page remains available for recovery.
+        try:
+            connector.start_bridge()
+            if reenable:
+                connector.test()
+                connector.apply()
+        except Exception:
+            connector.last_error = '新桥接启动或验证失败，请在配置页重新测试并启用。'
     if not args.no_browser:
         webbrowser.open(f'http://127.0.0.1:{args.port}')
     threading.Thread(target=connector.maintain,daemon=True).start()
@@ -681,7 +718,8 @@ def main():
         server.serve_forever()
     finally:
         server.server_close()
-        connector.stop()
+        if not connector.shutting_down:
+            connector.stop()
 
 
 if __name__=='__main__':

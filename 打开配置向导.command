@@ -31,5 +31,5 @@ mkdir -p "$HOME/Library/Application Support/KiroApiConnector"
 chmod 700 "$HOME/Library/Application Support/KiroApiConnector"
 echo "正在检查并准备 kRouter 0.5.163（首次使用需联网）…"
 python3 -c 'import app; c=app.Connector(app.user_paths()[0]); c.install()' || { read -r -p "依赖安装失败，按回车退出 "; exit 1; }
-nohup python3 app.py >> "$HOME/Library/Application Support/KiroApiConnector/launcher.log" 2>&1 &
+nohup python3 app.py "$@" >> "$HOME/Library/Application Support/KiroApiConnector/launcher.log" 2>&1 &
 echo "已启动配置向导；关闭此终端不影响后台服务。"
