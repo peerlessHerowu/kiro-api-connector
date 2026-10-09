@@ -5,7 +5,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parent
 TOP_LEVEL = ('.gitignore', '.gitattributes', 'AGENTS.md', 'README.md', 'app.py', 'build_portable.py',
-             'build_source.py', 'setup.ps1', 'setup.sh', 'upgrade.py', '打开配置向导.cmd', '打开配置向导.command', '升级到最新版.cmd')
+             'build_source.py', 'setup.ps1', 'setup.sh', 'upgrade.py', 'stop.py', '打开配置向导.cmd', '打开配置向导.command', '升级到最新版.cmd', '停止配置向导.cmd', '停止配置向导.command')
 DIRECTORIES = {'runtime': {'.js', '.cjs', '.py'}, 'web': {'.html'},
                'tests': {'.py', '.cjs'}}
 

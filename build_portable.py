@@ -17,6 +17,7 @@ def build(destination,node,router):
     shutil.copy2(ROOT/'README.md',destination/'README.md')
     shutil.copy2(ROOT/'upgrade.py',destination/'upgrade.py')
     shutil.copy2(ROOT/'升级到最新版.cmd',destination/'升级到最新版.cmd')
+    shutil.copy2(ROOT/'停止配置向导.cmd',destination/'停止配置向导.cmd')
     shutil.copytree(ROOT/'web',destination/'web')
     runtime=destination/'runtime';runtime.mkdir()
     for file in (ROOT/'runtime').glob('*'):
