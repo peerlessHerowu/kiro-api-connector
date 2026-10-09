@@ -9,6 +9,7 @@ import unittest
 import urllib.request
 import urllib.error
 import zipfile
+import io
 from unittest.mock import patch
 from http.server import ThreadingHTTPServer
 
@@ -26,6 +27,17 @@ class Tests(unittest.TestCase):
 
     def tearDown(self):
         self.temp.cleanup()
+
+    def test_html_response_has_safe_actionable_error(self):
+        with patch.object(self.connector.opener,'open',return_value=io.BytesIO(b'<html>private-secret</html>')):
+            with self.assertRaisesRegex(app.InvalidJsonResponse,'非 JSON') as error:
+                self.connector.request('https://example.com/v1/models')
+            self.assertNotIn('private-secret',str(error.exception))
+
+    def test_invalid_model_catalog_has_actionable_error(self):
+        self.connector.request=lambda *args,**kwargs: {'data':'not-a-list'}
+        with self.assertRaisesRegex(app.InvalidJsonResponse,'模型接口格式'):
+            self.connector.models('https://example.com/v1','fake-key')
 
     def test_apply_restore_keeps_other_settings(self):
         app.write_json(self.settings,{'editor.fontSize':16})

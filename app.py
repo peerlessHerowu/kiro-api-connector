@@ -32,6 +32,10 @@ class RequestFailure(RuntimeError):
         super().__init__(f'请求失败：HTTP {status}，请检查地址、凭据或模型权限。')
 
 
+class InvalidJsonResponse(RuntimeError):
+    pass
+
+
 def user_paths():
     if sys.platform=='darwin':
         support=Path.home()/'Library/Application Support'
@@ -161,7 +165,10 @@ class Connector:
               method=method, headers={'Content-Type':'application/json', **(headers or {})})
         try:
             with self.opener.open(req, timeout=timeout) as response:
-                return json.load(response)
+                try:
+                    return json.load(response)
+                except (json.JSONDecodeError, UnicodeDecodeError):
+                    raise InvalidJsonResponse('接口返回了空内容或非 JSON 内容，请检查 API 地址（通常含 /v1），以及是否被登录页面或网站防护拦截。') from None
         except urllib.error.HTTPError as error:
             # Never echo server bodies, which may contain submitted credentials.
             raise RequestFailure(error.code) from None
@@ -184,8 +191,10 @@ class Connector:
             key = self.key()
         if not key:
             raise ValueError('请填写 API key。')
-        data = self.request(base + '/models', headers={'Authorization':'Bearer ' + key})
-        ids = sorted({x['id'] for x in data.get('data', []) if isinstance(x.get('id'), str)})
+        data = self.request(base + '/models', headers={'Authorization':'Bearer ' + key, 'Accept':'application/json'})
+        if not isinstance(data,dict) or not isinstance(data.get('data'),list):
+            raise InvalidJsonResponse('模型接口格式不兼容，需要 OpenAI 格式的 data 模型列表。请检查 Base URL，或手动填写模型 ID 后测试。')
+        ids = sorted({x['id'] for x in data['data'] if isinstance(x,dict) and isinstance(x.get('id'), str)})
         if not ids:
             raise RuntimeError('未读取到模型，可手动填写模型 ID 后测试。')
         return ids
@@ -296,6 +305,9 @@ class Connector:
                 available = self.models(base, key)
                 if any(x not in available for x in ids):
                     raise ValueError('所选模型不在这个 key 的模型目录中。')
+            except InvalidJsonResponse:
+                if not body.get('manualModels'):
+                    raise
             except RequestFailure as error:
                 if not body.get('manualModels') or error.status not in (404,405,501):
                     raise

@@ -11,8 +11,8 @@
 已增加 macOS 路径、后台启动、LaunchAgent 登录自启及打开日志目录支持，适用于源码部署。Apple Silicon 和 Intel 均使用各自系统安装的 Node/Python；当前尚无 Mac 便携包、签名 App 或 DMG，也未完成 Mac 原生 Kiro 的实机验收。
 
 1. 安装并正常登录 macOS 版 Kiro。
-2. 安装 Python 3.11+、Node.js 22.17+。如果已使用 Homebrew，可执行 `brew install python node`。
-3. 克隆项目后双击 **打开配置向导.command**；如果下载的文件没有执行权限，执行 `chmod +x 打开配置向导.command`，然后运行 `./打开配置向导.command`。也可在终端直接执行 `python3 app.py`，此时需保持终端运行。
+2. 下载干净源码包，完整解压到长期保留的目录。首次使用需联网；若没有 Python 3.11+、Node.js 22.17+，先从 https://brew.sh 安装 Homebrew（也可自行安装 Python / Node）。
+3. 双击 **打开配置向导.command**。入口检查版本，有 Homebrew 时会请求确认并安装缺失的 Python / Node，然后打开网页；关闭终端不影响后台服务。如果下载的文件没有执行权限，执行 `chmod +x 打开配置向导.command`，然后运行 `./打开配置向导.command`。也可在终端直接执行 `python3 app.py`，此时需保持终端运行。若 macOS 阻止运行，确认文件来源后在系统设置的“隐私与安全性”中允许；不需要关闭系统安全保护。
 4. 在向导中安装固定版本 kRouter 依赖，再填地址/key、选择模型、保存测试并启用，与 Windows 的配置流程相同。
 
 Mac 数据目录为 `~/Library/Application Support/KiroApiConnector`，Kiro 设置路径为 `~/Library/Application Support/Kiro/User/settings.json`。登录自启项为 `~/Library/LaunchAgents/club.kiro-api-connector.plist`，下次登录后由 launchd 启动；没有执行强制注销或系统重启测试。日志目录按钮使用 Finder 打开。
