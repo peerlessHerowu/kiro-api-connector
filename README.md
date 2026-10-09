@@ -67,6 +67,7 @@ chmod +x setup.sh
 - 需要正常登录 Kiro；这不是登录绕过工具。当前主要实现 OpenAI Chat Completions 兼容接口，不能保证任意中转站或任意 Kiro 版本兼容。
 - 当前自动写设置仅支持严格 JSON。Kiro settings.json 含 JSONC 注释或尾逗号时会拒绝修改并保留原文件。
 - 向导默认给 GPT-6 系列填写思考档位模型列表，提供 Low / Medium / High / Extra High（low / medium / high / xhigh）。其他模型可手动添加；实际支持由中转站决定，不支持的模型请从该列表移除。已有空列表配置刷新向导后需重新保存，Kiro 重新加载后生效。
+- 向导中的“上下文预算”默认是 200000 token。桥接会把实际/估算使用量转换为 Kiro 的 `contextUsageEvent`，让 Kiro 在约 80% 时摘要、约 95% 时截断；超大的工具结果会先缩短。它是本地保护预算，不是模型官方上下文上限，可按中转站实际能力调整。kRouter 本身只转发请求，不负责 Kiro 的压缩策略。
 - 不需要复制或修改正常 Kiro 客户端。本项目不包含独立测试客户端的排队或模型分组补丁。
 
 每台电脑在自己的用户目录保存数据：Windows 为 `%LOCALAPPDATA%\KiroApiConnector`，Mac 为 `~/Library/Application Support/KiroApiConnector`。日志、数据库、key 和管理密码都不能作为分享内容。
@@ -80,6 +81,12 @@ GitHub 仓库提供源码及固定版本信息，不上传 `.local`、运行数�
 ```powershell
 python build_source.py --output C:\output\kiro-api-connector-source.zip
 ```
+
+## 后续升级
+
+便携包用户第一次需要换到带有“升级到最新版.cmd”的新版包；以后关闭配置向导后双击它即可从 GitHub 下载程序文件。它只更新 `app.py`、网页和桥接脚本，保留本机 API key、kRouter 数据库、Kiro 设置和日志；升级后重新打开向导即可。旧包没有这个入口，不能凭空获得升级功能。
+
+源码用户不要反复发送压缩包：在项目目录运行 `powershell -ExecutionPolicy Bypass -File .\setup.ps1 -Update`，macOS 运行 `./setup.sh --update`。脚本会先检查工作区干净，再执行快进更新和启动；已有本机数据会保留。
 
 源码导出使用文件白名单，不包含本机运行环境、缓存、数据库和凭据。分享原始便携 zip 也可以；接收者在自己电脑填写配置，不需要作者的登录状态或配置文件。不要移动已经注册自启的安装目录，移动后应重新注册。
 

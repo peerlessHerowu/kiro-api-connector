@@ -295,6 +295,9 @@ class Connector:
             base = validate_url(body.get('baseUrl',''))
             ids = list(dict.fromkeys(body.get('models', [])))
             default = body.get('defaultModel')
+            context_budget = body.get('contextBudget', self.config.get('contextBudget', 200000) if self.config else 200000)
+            if isinstance(context_budget, bool) or not isinstance(context_budget, int) or not 8000 <= context_budget <= 2000000:
+                raise ValueError('上下文预算需为 8000 到 2000000 之间的整数 token。')
             if not ids or default not in ids or len(ids)>100 or any(not isinstance(x,str) or not x or len(x)>200 for x in ids):
                 raise ValueError('请选择模型与有效的默认模型，最多100个。')
             key = body.get('apiKey') or (self.key() if self.config else '')
@@ -343,7 +346,8 @@ class Connector:
                       'nodeId':node_id,'connectionId':connection_id,'routerKeyId':router_key,
                       'dataDir':str(self.data),'routerPort':self.router_port,'bridgePort':self.bridge_port,
                       'routerApp':self.dependencies()['routerApp'],
-                      'effortModels':[x for x in body.get('effortModels',[]) if x in ids]}
+                      'effortModels':[x for x in body.get('effortModels',[]) if x in ids],
+                      'contextBudget':context_budget}
             write_json(self.config_file, config)
             self.config = config
             self.last_test = None
@@ -452,7 +456,7 @@ class Connector:
 
     def status(self):
         return {'configured':bool(self.config),'config':{k:v for k,v in self.config.items()
-                if k in ('baseUrl','models','defaultModel','effortModels')},
+                if k in ('baseUrl','models','defaultModel','effortModels','contextBudget')},
                 'running':{k:p.poll() is None for k,p in self.processes.items()},
                 'enabled':self.backup.exists(),'lastTest':self.last_test,
                 'dashboard':f'http://127.0.0.1:{self.router_port}/dashboard/usage',

@@ -62,20 +62,30 @@ async function start() {
     frames.push(ot("metadataEvent",{stopReason,...e.usage?{tokenUsage:{
       uncachedInputTokens:e.usage.prompt_tokens||0,outputTokens:e.usage.completion_tokens||0
     }}:{}}));
+    frames.push(ot("contextUsageEvent",{contextUsagePercentage:connectorContext.usage(e)}));
     e.finishSent=true;e.toolCallInit={};return frames;
   }` + source.slice(finishEnd);
   source = source.replace('let i=Pd(t);', 'let i=Pd(t,r.finish_reason);')
     .replaceAll('ot("reasoningContentEvent",{content:', 'ot("reasoningContentEvent",{text:');
-  const requestMarker = 'o={model:r,messages:s,stream:!0,';
-  if (!source.includes(requestMarker)) throw new Error('Installed kRouter request converter layout changed');
-  source = source.replace(requestMarker,
-    'o={model:r,messages:s,stream:!0,...n.reasoning_effort?{reasoning_effort:n.reasoning_effort}:{},');
+  const preparation = 'let i=Dd(n),o={model:r,messages:s,stream:!0,';
+  const stateMarker = 'l=Wo(r);await Bd(u,t,Ud,l)';
+  const usageMarker = 'let a=[],r=e.choices?.[0],n=r?.delta||{};';
+  if (![preparation,stateMarker,usageMarker].every(marker => source.split(marker).length === 2)) {
+    throw new Error('Installed kRouter context converter layout changed');
+  }
+  source = source.replace(preparation,
+    'let contextBudget=connectorContext.budget(connectorConfig,r.slice(connectorConfig.prefix.length+1)),contextClipped=connectorContext.protectMessages(s,contextBudget);let i=Dd(n),o={model:r,messages:s,stream:!0,...n.reasoning_effort?{reasoning_effort:n.reasoning_effort}:{},')
+    .replace(stateMarker,
+      'l=Wo(r);Object.assign(l,{contextBudget,contextClipped,inputEstimate:connectorContext.estimate(o)});await Bd(u,t,Ud,l)')
+    .replace(usageMarker,
+      'if(e.usage&&t.finishSent){t.usage=e.usage;return ot("contextUsageEvent",{contextUsagePercentage:connectorContext.usage(t)})}let a=[],r=e.choices?.[0],n=r?.delta||{};');
   const boundary = source.indexOf('var _u=require("https"),eh=require("http2")');
   if (boundary < 0) throw new Error('Installed kRouter bundle layout changed');
   const converter = new Module(filename, module);
   converter.filename = filename;
   converter.paths = Module._nodeModulePaths(require('node:path').dirname(filename));
-  converter._compile(source.slice(0, boundary) + '\nmodule.exports=Zo();', filename);
+  const injection = `const connectorContext=require(${JSON.stringify(path.join(__dirname,'context_policy.cjs'))});const connectorConfig=${JSON.stringify({prefix:config.prefix,contextBudget:config.contextBudget,contextBudgets:config.contextBudgets})};\n`;
+  converter._compile(injection + source.slice(0, boundary) + '\nmodule.exports=Zo();', filename);
   const kiro = converter.exports;
 
   const server = http.createServer(async (req, res) => {

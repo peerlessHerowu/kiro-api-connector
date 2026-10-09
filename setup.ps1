@@ -1,5 +1,12 @@
+param([switch]$Update)
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
+
+if ($Update) {
+  if (-not (Get-Command git -ErrorAction SilentlyContinue)) { throw '更新源码需要 Git；也可以重新下载最新源码包。' }
+  if ((git status --porcelain) -ne '') { throw '源码目录有未提交修改，请先处理后再更新。' }
+  git pull --ff-only
+}
 
 function Find-Python {
   foreach ($name in @('py','python','python3')) {
