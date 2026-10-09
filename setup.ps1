@@ -42,4 +42,8 @@ if (-not $nodeReady) {
 if ($LASTEXITCODE -ne 0) { throw 'kRouter 依赖安装失败，请查看本机 install.log。' }
 
 Write-Host '正在启动配置向导。已有配置会保留，不会覆盖其他 Kiro 设置。'
-& $python app.py
+if ($Update) {
+  & $python app.py --takeover
+} else {
+  & $python app.py
+}

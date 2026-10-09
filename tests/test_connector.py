@@ -40,6 +40,10 @@ class Tests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'HTTP 404'):
                 self.connector.update()
 
+    def test_setup_update_uses_takeover(self):
+        self.assertIn('app.py --takeover', (Path(__file__).parents[1] / 'setup.ps1').read_text(encoding='utf-8-sig'))
+        self.assertIn('app.py --takeover', (Path(__file__).parents[1] / 'setup.sh').read_text(encoding='utf-8'))
+
     def test_invalid_model_catalog_has_actionable_error(self):
         self.connector.request=lambda *args,**kwargs: {'data':'not-a-list'}
         with self.assertRaisesRegex(app.InvalidJsonResponse,'模型接口格式'):

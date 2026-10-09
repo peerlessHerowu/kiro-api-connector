@@ -7,4 +7,7 @@ if [ "${1:-}" = "--update" ]; then
   git pull --ff-only
 fi
 chmod +x "打开配置向导.command" 2>/dev/null || true
+if [ "${1:-}" = "--update" ]; then
+  exec python3 app.py --takeover
+fi
 exec ./"打开配置向导.command"

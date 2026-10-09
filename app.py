@@ -105,36 +105,43 @@ def free_port(port):
 
 def takeover_existing(port):
     """Gracefully stop this tool's existing wizard before switching installations."""
-    if os.name != 'nt':
-        raise RuntimeError('已有配置向导正在运行，请先关闭它。')
     try:
         with urllib.request.urlopen(f'http://127.0.0.1:{port}/', timeout=2) as response:
             page = response.read().decode('utf8', 'replace')
         match = re.search(r"const token='([^']+)'", page)
         if not match or 'Kiro API Connector' not in page:
             raise RuntimeError('配置端口已被其他本地程序占用，未停止。')
-        answer = ctypes.windll.user32.MessageBoxW(
-            None, '检测到已有 Kiro API Connector。是否停止旧向导并切换到当前版本？',
-            'Kiro API Connector', 0x24)
-        if answer != 6:
-            raise RuntimeError('已取消切换，旧向导保持运行。')
+        if os.name == 'nt':
+            answer = ctypes.windll.user32.MessageBoxW(
+                None, '检测到已有 Kiro API Connector。是否停止旧向导并切换到当前版本？',
+                'Kiro API Connector', 0x24)
+            if answer != 6:
+                raise RuntimeError('已取消切换，旧向导保持运行。')
         request = urllib.request.Request(
             f'http://127.0.0.1:{port}/api/stop', data=b'{}', method='POST',
             headers={'Content-Type':'application/json','Origin':f'http://127.0.0.1:{port}',
                      'X-Setup-Token':match.group(1)})
         with urllib.request.urlopen(request, timeout=15):
             pass
-        output = subprocess.check_output(['netstat','-ano','-p','tcp'], text=True,
-                                         stderr=subprocess.DEVNULL, creationflags=FLAGS)
-        pids = set()
-        for line in output.splitlines():
-            fields = line.split()
-            if len(fields) >= 5 and fields[1].endswith(':' + str(port)) and fields[3] == 'LISTENING':
-                pids.add(fields[4])
-        for pid in pids:
-            subprocess.run(['taskkill','/PID',pid,'/T','/F'], check=False,
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                           creationflags=FLAGS)
+        if os.name == 'nt':
+            output = subprocess.check_output(['netstat','-ano','-p','tcp'], text=True,
+                                             stderr=subprocess.DEVNULL, creationflags=FLAGS)
+            pids = set()
+            for line in output.splitlines():
+                fields = line.split()
+                if len(fields) >= 5 and fields[1].endswith(':' + str(port)) and fields[3] == 'LISTENING':
+                    pids.add(fields[4])
+            for pid in pids:
+                subprocess.run(['taskkill','/PID',pid,'/T','/F'], check=False,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                               creationflags=FLAGS)
+        else:
+            # macOS source updates need the same handoff as Windows. lsof is
+            # part of the base system and limits termination to this port.
+            output = subprocess.check_output(['lsof','-tiTCP:' + str(port),'-sTCP:LISTEN'], text=True,
+                                             stderr=subprocess.DEVNULL)
+            for pid in {x.strip() for x in output.splitlines() if x.strip().isdigit()}:
+                os.kill(int(pid), 15)
         for _ in range(40):
             if free_port(port): return
             time.sleep(.25)

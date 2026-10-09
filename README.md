@@ -32,7 +32,7 @@ Windows 管理密码使用 DPAPI；Mac 管理密码保存在仅本用户可访�
 
 ## 从 GitHub 克隆或复制源码
 
-源码版支持 Windows 与 macOS。克隆后推荐执行统一入口：Windows PowerShell 运行 `./setup.ps1`，Mac 运行 `./setup.sh`。入口检查基础环境并启动配置向导；Mac 入口在缺少依赖且检测到 Homebrew 时会请求确认安装。也可以直接使用各平台的“打开配置向导”入口。
+源码版支持 Windows 与 macOS。克隆后推荐执行统一入口：Windows PowerShell 运行 `./setup.ps1`，Mac 运行 `./setup.sh`。入口检查基础环境并启动配置向导；Mac 入口在缺少依赖且检测到 Homebrew 时会请求确认安装。也可以直接使用各平台的“打开配置向导”入口。**普通执行不会拉取 GitHub 更新。**
 
 ```powershell
 python app.py
@@ -86,7 +86,7 @@ python build_source.py --output C:\output\kiro-api-connector-source.zip
 
 便携包用户第一次需要换到带有“升级到最新版.cmd”的新版包；以后可以双击它，或在配置页点击“检查更新并应用”，从 GitHub 下载程序文件。它只更新 `app.py`、网页和桥接脚本，保留本机 API key、kRouter 数据库、Kiro 设置和日志，并重启自己的桥接。旧包没有这个入口，不能凭空获得升级功能。
 
-源码用户不要反复发送压缩包：在项目目录运行 `powershell -ExecutionPolicy Bypass -File .\setup.ps1 -Update`，macOS 运行 `./setup.sh --update`。脚本会先检查工作区干净，再执行快进更新和启动；已有本机数据会保留。
+源码用户不要反复发送压缩包：在项目目录运行 `powershell -ExecutionPolicy Bypass -File .\setup.ps1 -Update`，macOS 运行 `./setup.sh --update`。脚本会先检查工作区干净，再执行 `git pull --ff-only`；更新后会接管旧的本工具向导并启动新代码，已有本机数据、API key、kRouter 数据库和 Kiro 设置会保留。没有 `--Update` / `--update` 时，只使用当前目录已有代码，不会自动更新。
 
 源码导出使用文件白名单，不包含本机运行环境、缓存、数据库和凭据。分享原始便携 zip 也可以；接收者在自己电脑填写配置，不需要作者的登录状态或配置文件。不要移动已经注册自启的安装目录，移动后应重新注册。
 
