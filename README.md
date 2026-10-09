@@ -84,6 +84,8 @@ python build_source.py --output C:\output\kiro-api-connector-source.zip
 
 ## 后续升级
 
+配置页的“运行诊断”会分开检查依赖、模型目录、Bridge 20149、kRouter 20148、实际推理、Kiro endpoint 和最近日志提示；模型没有出现在 Kiro 时先运行它，再按失败项处理，最后在 Kiro 执行 `Developer: Reload Window`。
+
 便携包用户第一次需要换到带有“升级到最新版.cmd”的新版包；以后可以双击它，或在配置页点击“检查更新并应用”，从 GitHub 下载程序文件。它只更新 `app.py`、网页和桥接脚本，保留本机 API key、kRouter 数据库、Kiro 设置和日志，并重启自己的桥接。旧包没有这个入口，不能凭空获得升级功能。
 
 源码用户不要反复发送压缩包：在项目目录运行 `powershell -ExecutionPolicy Bypass -File .\setup.ps1 -Update`，macOS 运行 `./setup.sh --update`。脚本会先检查工作区干净，再执行 `git pull --ff-only`；更新后会接管旧的本工具向导并启动新代码，已有本机数据、API key、kRouter 数据库和 Kiro 设置会保留。已启用的 Kiro endpoint 会在新桥接通过实际推理测试后继续接管；若测试失败，会保留配置页供手动恢复。没有 `--Update` / `--update` 时，只使用当前目录已有代码，不会自动更新。

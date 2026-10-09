@@ -472,6 +472,52 @@ class Connector:
         if health.get('activeRequests', 0):
             raise RuntimeError('Kiro 正在回答，请等回答结束后再更新或更换连接，避免中断。')
 
+    def diagnose(self):
+        """Return safe, local-only checks; never include keys or log bodies."""
+        checks = []
+        def add(name, ok, detail, hint=''):
+            checks.append({'name':name, 'ok':bool(ok), 'detail':detail, **({'hint':hint} if hint else {})})
+        deps = self.dependencies()
+        add('依赖环境', deps['ready'], 'Node.js、node:sqlite、kRouter 均就绪' if deps['ready'] else '依赖未就绪', '先安装/检查 kRouter 依赖' if not deps['ready'] else '')
+        if not self.config:
+            add('连接配置', False, '尚未保存连接配置', '先填写 Base URL、API key 并读取模型')
+            return {'ok':False, 'checks':checks, 'suggestion':'先完成连接配置。'}
+        add('模型配置', bool(self.config.get('models')) and self.config.get('defaultModel') in self.config.get('models', []),
+            f"{len(self.config.get('models', []))} 个模型，默认 {self.config.get('defaultModel')}")
+        try:
+            ids = self.models(self.config['baseUrl'], self.key())
+            missing = [x for x in self.config['models'] if x not in ids]
+            add('中转站模型目录', not missing, f'已读取 {len(ids)} 个模型' if not missing else '保存的模型已不在当前 key 的目录中', '重新读取可用模型并重新保存' if missing else '')
+        except Exception as error:
+            add('中转站模型目录', False, type(error).__name__, '检查 Base URL、API key 或中转站连通性')
+        try:
+            health = self.bridge_health()
+            add('Bridge 20149', health.get('ok') is True, '运行中' if health.get('ok') else '未运行', '点击启动服务' if not health.get('ok') else '')
+        except Exception:
+            add('Bridge 20149', False, '无法连接', '点击启动服务或查看 bridge.log')
+        try:
+            self.api('/api/auth/status')
+            add('kRouter 20148', True, '运行中')
+        except Exception:
+            add('kRouter 20148', False, '无法连接', '点击启动服务或查看 router.log')
+        add('实际推理测试', bool(self.last_test), '已通过' if self.last_test else '尚未通过', '点击重新测试；失败时查看 bridge.log 和 router.log' if not self.last_test else '')
+        endpoint = f'http://127.0.0.1:{self.bridge_port}'
+        try:
+            settings = read_json(self.settings, {})
+            present = any(any(item.get('endpoint') == endpoint for item in settings.get(key, [])) for key in ENDPOINT_KEYS)
+            add('Kiro endpoint', present, '已写入 settings.json' if present else '未写入当前 Kiro settings.json', '点击启用到 Kiro' if not present else '在 Kiro 执行 Developer: Reload Window')
+        except Exception:
+            add('Kiro endpoint', False, '无法读取 settings.json', '确认 Kiro 已安装并检查权限')
+        log_hint=[]
+        for filename in ('bridge.log','router.log'):
+            path=self.home/filename
+            if path.exists():
+                text=path.read_text(encoding='utf8',errors='replace')[-12000:]
+                for marker in ('bridge_error=', 'error:', 'stream stall timeout', 'out=0'):
+                    if marker in text: log_hint.append(f'{filename} 包含 {marker}')
+        return {'ok':all(x['ok'] for x in checks), 'checks':checks,
+                'suggestion':'；'.join(log_hint) or ('所有本地检查通过；若 Kiro 仍看不到模型，请 Reload Window' if all(x['ok'] for x in checks) else '按失败项目的建议处理后重新诊断。')}
+
     def test(self):
         with self.lock:
             self.start_bridge()
@@ -674,6 +720,7 @@ def handler(connector, port):
                     if self.path=='/api/models': result={'models':connector.models(body['baseUrl'],body.get('apiKey',''))}
                     elif self.path=='/api/configure': result=connector.configure(body)
                     elif self.path=='/api/test': result=connector.test()
+                    elif self.path=='/api/diagnose': result=connector.diagnose()
                     elif self.path=='/api/enable': result=connector.apply()
                     elif self.path=='/api/start': connector.start_bridge();result=connector.status()
                     elif self.path=='/api/stop': result=connector.stop()

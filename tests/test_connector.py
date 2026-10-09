@@ -34,6 +34,20 @@ class Tests(unittest.TestCase):
                 self.connector.request('https://example.com/v1/models')
             self.assertNotIn('private-secret',str(error.exception))
 
+    def test_diagnose_reports_each_layer_without_secret(self):
+        self.connector.config={'baseUrl':'https://example.com/v1','models':['m'],'defaultModel':'m'}
+        self.connector.key=lambda:'secret-key'
+        self.connector.models=lambda *args:['m']
+        self.connector.dependencies=lambda:{'ready':True,'bundled':False,'sqlite':True,'routerApp':'app'}
+        self.connector.bridge_health=lambda:{'ok':True}
+        self.connector.api=lambda path,*args:{'ok':True}
+        self.connector.last_test={'model':'m'}
+        with patch.object(app,'read_json',return_value={}):
+            result=self.connector.diagnose()
+        self.assertEqual({x['name'] for x in result['checks']},
+            {'依赖环境','模型配置','中转站模型目录','Bridge 20149','kRouter 20148','实际推理测试','Kiro endpoint'})
+        self.assertNotIn('secret-key',json.dumps(result))
+
     def test_update_error_includes_updater_detail(self):
         self.connector.dependencies=lambda: {'bundled':True}
         with patch('subprocess.run', return_value=type('Result', (), {'returncode':1, 'stdout':'GitHub 下载失败：HTTP 404。', 'stderr':''})()):
