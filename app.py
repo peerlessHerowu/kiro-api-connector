@@ -454,6 +454,21 @@ class Connector:
             self.last_test = None
             return self.status()
 
+    def update(self):
+        if not self.dependencies()['bundled']:
+            raise RuntimeError('源码目录请执行 git pull --ff-only，再运行 setup.ps1 或 setup.sh。')
+        updater = ROOT / 'upgrade.py'
+        if not updater.exists():
+            raise RuntimeError('当前安装没有升级入口，请先换用带“升级到最新版.cmd”的新版便携包。')
+        result = subprocess.run([sys.executable, str(updater)], capture_output=True,
+                                timeout=180, creationflags=FLAGS)
+        if result.returncode:
+            raise RuntimeError('更新失败，未重启桥接；请检查网络后重试。')
+        if self.config:
+            self.stop_bridge()
+            self.start_bridge()
+        return self.status()
+
     def status(self):
         return {'configured':bool(self.config),'config':{k:v for k,v in self.config.items()
                 if k in ('baseUrl','models','defaultModel','effortModels','contextBudget')},
@@ -561,6 +576,7 @@ def handler(connector, port):
                     elif self.path=='/api/start': connector.start_bridge();result=connector.status()
                     elif self.path=='/api/stop': result=connector.stop()
                     elif self.path=='/api/autostart': result=connector.autostart(bool(body['enabled']))
+                    elif self.path=='/api/update': result=connector.update()
                     elif self.path=='/api/install': result=connector.install()
                     elif self.path=='/api/admin-password': result={'password':dpapi(read_json(connector.home/'admin.json')['protected'],True)}
                     elif self.path=='/api/open-logs':
