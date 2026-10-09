@@ -34,10 +34,21 @@ if (-not $python) {
   if (-not $python) { throw 'Python 已安装但当前会话无法找到，请重新打开 PowerShell 执行 setup.ps1。' }
 }
 $node = Get-Command node -ErrorAction SilentlyContinue
+$nodeReady = $false
 if ($node) {
-  try { & $node.Source -e 'const [a,b]=process.versions.node.split(".").map(Number); if(a<22 || (a===22 && b<17))process.exit(1); require("node:sqlite")' 2>$null } catch {}
-  $nodeReady = $LASTEXITCODE -eq 0
-} else { $nodeReady = $false }
+  try {
+    $versionText = (& $node.Source --version 2>$null | Select-Object -First 1)
+    $versionMatch = [regex]::Match([string]$versionText, '^v(\d+)\.(\d+)')
+    if ($versionMatch.Success) {
+      $major = [int]$versionMatch.Groups[1].Value
+      $minor = [int]$versionMatch.Groups[2].Value
+      if (($major -gt 22) -or ($major -eq 22 -and $minor -ge 17)) {
+        & $node.Source -e 'require("node:sqlite")' 2>$null
+        $nodeReady = ($LASTEXITCODE -eq 0)
+      }
+    }
+  } catch { $nodeReady = $false }
+}
 if (-not $nodeReady) {
   if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { throw '缺少符合要求的 Node 和 winget，请使用便携包或安装 Node 22.17+。' }
   winget install --id OpenJS.NodeJS.LTS --exact --accept-source-agreements --accept-package-agreements
