@@ -476,7 +476,8 @@ class Connector:
                 'enabled':self.backup.exists(),'lastTest':self.last_test,
                 'dashboard':f'http://127.0.0.1:{self.router_port}/dashboard/usage',
                 'dataDir':str(self.home), 'dependencies':self.dependencies(),'lastError':self.last_error,
-                'platform':sys.platform,'autostart':startup_path().exists()}
+                'platform':sys.platform,'autostart':startup_path().exists(),
+                'updateSupported':bool(self.dependencies()['bundled'] and (ROOT/'upgrade.py').exists())}
 
     def autostart(self, enabled):
         if sys.platform=='darwin':
