@@ -5,7 +5,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parent
 TOP_LEVEL = ('.gitignore', '.gitattributes', 'AGENTS.md', 'README.md', 'app.py', 'build_portable.py',
-             'build_source.py', '打开配置向导.cmd', '打开配置向导.command')
+             'build_source.py', 'setup.ps1', 'setup.sh', '打开配置向导.cmd', '打开配置向导.command')
 DIRECTORIES = {'runtime': {'.js', '.cjs', '.py'}, 'web': {'.html'},
                'tests': {'.py', '.cjs'}}
 
@@ -30,7 +30,7 @@ def build(output, root=ROOT):
                 name=Path('kiro-api-connector')/path.relative_to(root)
                 info=zipfile.ZipInfo.from_file(path,name)
                 info.create_system=3
-                info.external_attr=(0o100755 if path.suffix=='.command' else 0o100644)<<16
+                info.external_attr=(0o100755 if path.suffix in ('.command','.sh') else 0o100644)<<16
                 info.compress_type=zipfile.ZIP_DEFLATED
                 archive.writestr(info,path.read_bytes())
     return output

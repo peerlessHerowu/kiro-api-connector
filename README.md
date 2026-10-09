@@ -32,7 +32,7 @@ Windows 管理密码使用 DPAPI；Mac 管理密码保存在仅本用户可访�
 
 ## 从 GitHub 克隆或复制源码
 
-源码版支持 Windows 与 macOS，需要 Python 3.11+ 和支持 `node:sqlite` 的 Node.js（建议 22.17+）。先安装这两个运行环境；然后克隆仓库或解压干净的源码包，Windows 双击 **打开配置向导.cmd**，Mac 使用 **打开配置向导.command**。也可以执行：
+源码版支持 Windows 与 macOS。克隆后推荐执行统一入口：Windows PowerShell 运行 `./setup.ps1`，Mac 运行 `./setup.sh`。入口检查基础环境并启动配置向导；Mac 入口在缺少依赖且检测到 Homebrew 时会请求确认安装。也可以直接使用各平台的“打开配置向导”入口。
 
 ```powershell
 python app.py
@@ -47,7 +47,16 @@ python app.py
 ```powershell
 git clone https://github.com/peerlessHerowu/kiro-api-connector.git
 cd kiro-api-connector
-python app.py
+./setup.ps1
+```
+
+macOS：
+
+```bash
+git clone https://github.com/peerlessHerowu/kiro-api-connector.git
+cd kiro-api-connector
+chmod +x setup.sh
+./setup.sh
 ```
 
 ## 更换配置、已有桥接与适用范围
