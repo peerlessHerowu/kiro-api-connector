@@ -40,6 +40,32 @@ class Tests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'HTTP 404'):
                 self.connector.update()
 
+    def test_busy_bridge_cannot_be_updated(self):
+        self.connector.bridge_health=lambda:{'activeRequests':1}
+        with patch('subprocess.run') as run:
+            with self.assertRaisesRegex(RuntimeError, '正在回答'):
+                self.connector.update()
+            run.assert_not_called()
+
+    def test_context_change_does_not_restart_hot_bridge(self):
+        old={'nodeId':'n','connectionId':'c','routerKeyId':'k','prefix':'kiro-connector',
+             'baseUrl':'https://example.com/v1','models':['m'],'defaultModel':'m',
+             'effortModels':[],'contextBudget':200000}
+        self.connector.config=old
+        self.connector.key=lambda:'fake'
+        self.connector.models=lambda *args:['m']
+        self.connector.start_router=lambda:None
+        self.connector.start_bridge=lambda:None
+        self.connector.bridge_health=lambda:{'hotReload':True,'activeRequests':1}
+        self.connector.dependencies=lambda:{'routerApp':'fake','bundled':False}
+        self.connector.test=lambda:None
+        with patch.object(self.connector, 'stop_bridge') as stop, patch.object(self.connector, 'api') as api:
+            self.connector.configure({'baseUrl':old['baseUrl'],'models':['m'],
+                'defaultModel':'m','contextBudget':500000})
+            stop.assert_not_called()
+            api.assert_not_called()
+        self.assertEqual(app.read_json(self.connector.config_file)['contextBudget'],500000)
+
     def test_update_shutdown_preserves_kiro_connection(self):
         self.connector.apply()
         settings = self.settings.read_bytes()

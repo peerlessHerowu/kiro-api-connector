@@ -324,13 +324,15 @@ class Connector:
             previous_key = self.key() if previous else None
             self.created = []
             self.configuration_mutated = False
+            self.bridge_restarted = False
             try:
                 return self._configure(body)
             except Exception:
                 if not self.configuration_mutated:
                     raise
                 self.last_test = None
-                self.stop_bridge()
+                if self.bridge_restarted:
+                    self.stop_bridge()
                 if previous:
                     self.config = previous
                     write_json(self.config_file, previous)
@@ -381,15 +383,23 @@ class Connector:
                 if not body.get('manualModels') or error.status not in (404,405,501):
                     raise
             self.start_router()
+            hot_reload = False
+            if self.config:
+                hot_reload = (base == self.config['baseUrl'] and key == self.key() and
+                              self.bridge_health().get('hotReload', False))
+                if not hot_reload:
+                    self.require_idle_bridge()
             self.configuration_mutated = True
             if self.config:
-                self.stop_bridge()
-                self.api('/api/provider-nodes/' + self.config['nodeId'],
-                         {'baseUrl':base, 'name':'Kiro API Connector',
-                          'prefix':self.config['prefix'],'apiType':'chat'}, 'PUT')
-                self.api('/api/providers/' + self.config['connectionId'],
-                         {'apiKey':key,'defaultModel':default,
-                          'providerSpecificData':{'baseUrl':base,'connectionProxyEnabled':False}}, 'PUT')
+                if not hot_reload:
+                    self.bridge_restarted = True
+                    self.stop_bridge()
+                    self.api('/api/provider-nodes/' + self.config['nodeId'],
+                             {'baseUrl':base, 'name':'Kiro API Connector',
+                              'prefix':self.config['prefix'],'apiType':'chat'}, 'PUT')
+                    self.api('/api/providers/' + self.config['connectionId'],
+                             {'apiKey':key,'defaultModel':default,
+                              'providerSpecificData':{'baseUrl':base,'connectionProxyEnabled':False}}, 'PUT')
                 node_id, connection_id, router_key = (self.config[k] for k in ('nodeId','connectionId','routerKeyId'))
             else:
                 nodes = self.api('/api/provider-nodes')['nodes']
@@ -450,6 +460,17 @@ class Connector:
         if proc and proc.poll() is None:
             proc.terminate()
             proc.wait(timeout=10)
+
+    def bridge_health(self):
+        proc = self.processes.get('bridge')
+        if not proc or proc.poll() is not None:
+            return {}
+        return self.request(f'http://127.0.0.1:{self.bridge_port}/health', timeout=2)
+
+    def require_idle_bridge(self):
+        health = self.bridge_health()
+        if health.get('activeRequests', 0):
+            raise RuntimeError('Kiro 正在回答，请等回答结束后再更新或更换连接，避免中断。')
 
     def test(self):
         with self.lock:
@@ -531,6 +552,7 @@ class Connector:
                 proc.terminate(); proc.wait(timeout=10)
 
     def update(self):
+        self.require_idle_bridge()
         if not self.dependencies()['bundled']:
             raise RuntimeError('源码目录请执行 git pull --ff-only，再运行 setup.ps1 或 setup.sh。')
         updater = ROOT / 'upgrade.py'
@@ -543,6 +565,7 @@ class Connector:
             detail = detail[-1] if detail else '请检查网络或仓库访问权限。'
             raise RuntimeError('更新失败，未重启桥接：' + detail)
         if self.config:
+            self.require_idle_bridge()
             self.stop_bridge()
             self.start_bridge()
         return self.status()

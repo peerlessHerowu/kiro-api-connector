@@ -4,12 +4,21 @@ const fs = require('node:fs');
 const Module = require('node:module');
 const { DatabaseSync } = require('node:sqlite');
 const legacyProfile = require('./legacy_profile.cjs');
+const { retryEmptyStream } = require('./empty_stream.cjs');
 
 const path = require('node:path');
-const config = JSON.parse(fs.readFileSync(process.env.KIRO_CONNECTOR_CONFIG || path.join(__dirname, 'config.json'), 'utf8'));
+process.env.KIRO_CONNECTOR_CONFIG ||= path.join(__dirname, 'config.json');
+const config = JSON.parse(fs.readFileSync(process.env.KIRO_CONNECTOR_CONFIG, 'utf8'));
 const router = 'http://127.0.0.1:' + config.routerPort;
-const defaultModel = config.defaultModel;
 const efforts = ['low', 'medium', 'high', 'xhigh'];
+let activeRequests = 0;
+const fetchLocal = globalThis.fetch;
+globalThis.fetch = function(input, init) {
+  const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url);
+  return url.origin === router && url.pathname === '/v1/chat/completions'
+    ? retryEmptyStream(() => fetchLocal(input, init), init?.signal)
+    : fetchLocal(input, init);
+};
 
 function json(res, status, value) {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -74,7 +83,7 @@ async function start() {
     throw new Error('Installed kRouter context converter layout changed');
   }
   source = source.replace(preparation,
-    'let contextBudget=connectorContext.budget(connectorConfig,r.slice(connectorConfig.prefix.length+1)),contextClipped=connectorContext.protectMessages(s,contextBudget),summaryClipped=!!s.connectorSummaryClipped;contextClipped&&console.log(`context_protection_clipped=${contextClipped} estimated=${connectorContext.estimate(s)} budget=${contextBudget} summary=${summaryClipped}`);let i=Dd(n),o={model:r,messages:s,stream:!0,...n.reasoning_effort?{reasoning_effort:n.reasoning_effort}:{},')
+    'let liveConfig=JSON.parse(require("fs").readFileSync(process.env.KIRO_CONNECTOR_CONFIG,"utf8")),contextBudget=connectorContext.budget(liveConfig,r.slice(liveConfig.prefix.length+1)),contextClipped=connectorContext.protectMessages(s,contextBudget),summaryClipped=!!s.connectorSummaryClipped;contextClipped&&console.log(`context_protection_clipped=${contextClipped} estimated=${connectorContext.estimate(s)} budget=${contextBudget} summary=${summaryClipped}`);let i=Dd(n),o={model:r,messages:s,stream:!0,...n.reasoning_effort?{reasoning_effort:n.reasoning_effort}:{},')
     .replace(stateMarker,
       'l=Wo(r);Object.assign(l,{contextBudget,contextClipped,summaryClipped,inputEstimate:connectorContext.estimate(o)});await Bd(u,t,Ud,l)')
     .replace(usageMarker,
@@ -89,16 +98,18 @@ async function start() {
   const kiro = converter.exports;
 
   const server = http.createServer(async (req, res) => {
+    let generating = false;
     try {
       const url = new URL(req.url, `http://127.0.0.1:${config.bridgePort}`);
       const target = String(req.headers['x-amz-target'] || '');
       console.log(`${req.method} ${url.pathname} ${target}`);
-      if (url.pathname === '/health') return json(res, 200, { ok: true });
+      if (url.pathname === '/health') return json(res, 200, { ok: true, activeRequests, hotReload: true });
+      Object.assign(config, JSON.parse(fs.readFileSync(process.env.KIRO_CONNECTOR_CONFIG, 'utf8')));
       if (url.pathname === '/List-Available-Models' || target.includes('ListAvailableModels')) {
         req.resume();
         const models = await getModels();
-        return json(res, 200, { models, ...(models.some(m => m.modelId === defaultModel)
-          ? { defaultModel: { modelId: defaultModel } } : {}) });
+        return json(res, 200, { models, ...(models.some(m => m.modelId === config.defaultModel)
+          ? { defaultModel: { modelId: config.defaultModel } } : {}) });
       }
       const chunks = [];
       let size = 0;
@@ -111,7 +122,7 @@ async function start() {
       if (/generateAssistantResponse/i.test(url.pathname) ||
           target.includes('GenerateAssistantResponse')) {
         const requested = JSON.parse(body).conversationState?.currentMessage?.userInputMessage?.modelId;
-        const selected = requested && requested !== 'auto' ? requested : defaultModel;
+        const selected = requested && requested !== 'auto' ? requested : config.defaultModel;
         const [model, legacyEffort] = selected.split('::');
         if (!(await getModels()).some(item => item.modelId === model)) {
           return json(res, 400, { message: 'Requested model is not available to this new-api key' });
@@ -125,6 +136,9 @@ async function start() {
           payload.reasoning_effort = effort;
           console.log(`reasoning_selection=${model}:${effort}`);
         }
+        generating = true;
+        activeRequests++;
+        console.log('generation_start=' + JSON.stringify({time:new Date().toISOString(), activeRequests, model}));
         return await kiro.intercept(req, res, Buffer.from(JSON.stringify(payload)), `${config.prefix}/${model}`);
       }
       // Preserve official profile/enterprise policy responses; do not fabricate permissions.
@@ -150,6 +164,11 @@ async function start() {
       console.error(`bridge_error=${error.name}`);
       if (!res.headersSent) json(res, 502, { message: 'Local bridge request failed' });
       else res.end();
+    } finally {
+      if (generating) {
+        activeRequests--;
+        console.log('generation_end=' + JSON.stringify({time:new Date().toISOString(), activeRequests}));
+      }
     }
   });
   server.listen(config.bridgePort, '127.0.0.1', () => console.log('local_bridge_ready=' + config.bridgePort));
