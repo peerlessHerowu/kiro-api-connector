@@ -1,4 +1,4 @@
-﻿\xef\xbb\xbfparam([switch]$Update, [switch]$Restart)
+﻿param([switch]$Update, [switch]$Restart)
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 
