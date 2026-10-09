@@ -3,9 +3,12 @@
 <title>Kiro API Connector</title>
 <style>
 :root{color-scheme:light;--ink:#172033;--muted:#6b7280;--line:#e3e7ed;--accent:#5b49df}*{box-sizing:border-box}body{margin:0;background:#f6f7fb;font:15px/1.6 system-ui,"Microsoft YaHei",sans-serif;color:var(--ink)}main{max-width:1040px;margin:46px auto;padding:0 24px}header{display:flex;justify-content:space-between;align-items:center;margin-bottom:28px}h1{font-size:28px;letter-spacing:-.6px;margin:0}h2{font-size:18px;margin:0 0 16px}p{margin:6px 0;color:var(--muted)}.badge{padding:6px 13px;border-radius:30px;background:#eeebff;color:var(--accent);font-size:13px}.grid{display:grid;grid-template-columns:1.65fr 1fr;gap:22px}.card{background:white;border:1px solid var(--line);border-radius:16px;padding:25px;margin-bottom:20px}.step{display:inline-flex;align-items:center;justify-content:center;background:#eeebff;color:var(--accent);width:27px;height:27px;border-radius:8px;margin-right:9px}label{display:block;font-size:13px;font-weight:600;margin:17px 0 6px}input,select{font:inherit;width:100%;padding:10px 12px;border:1px solid #d5dae5;border-radius:9px;background:white;color:var(--ink)}input:focus,select:focus{outline:2px solid #b5aaff;outline-offset:1px}button{font:inherit;cursor:pointer;padding:10px 16px;border:1px solid #d8dce5;border-radius:9px;background:white;color:var(--ink)}button.primary{background:var(--accent);border-color:var(--accent);color:white}button:disabled{opacity:.5;cursor:wait}.row{display:flex;gap:10px;flex-wrap:wrap;margin-top:17px}.note{font-size:12px;color:var(--muted)}#models{max-height:250px;overflow:auto;margin-top:14px}.model{display:flex;gap:9px;align-items:center;padding:7px 0;font-weight:400;margin:0}.model input,.check input{width:auto}.check{display:flex;align-items:center;gap:8px;font-weight:400}#message{white-space:pre-wrap;padding:13px 16px;border-radius:9px;background:#eeebff;margin-bottom:20px;display:none}#message.error{background:#fff0ef;color:#9f2727}.detail{display:flex;justify-content:space-between;gap:14px;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px}.path{overflow-wrap:anywhere;font-size:12px;color:var(--muted)}a{color:var(--accent)}details{margin-top:16px}summary{cursor:pointer;color:var(--muted);font-size:13px}@media(max-width:740px){.grid{grid-template-columns:1fr}main{margin-top:24px}header{align-items:flex-start;gap:12px}h1{font-size:23px}}
+</style><style>
+#message{position:fixed;right:24px;bottom:24px;z-index:5;max-width:min(460px,calc(100vw - 48px));margin:0;box-shadow:0 8px 30px #17203320}
+dialog{border:0;border-radius:14px;padding:0;width:min(460px,calc(100vw - 40px));color:var(--ink);box-shadow:0 16px 60px #17203340}dialog::backdrop{background:#17203355}#noticeBody{padding:22px}#noticeText{white-space:pre-wrap;margin-bottom:18px}#noticeClose{float:right}
 </style></head><body><main>
 <header><div><h1>Kiro API Connector</h1><p>连接你的模型，继续在 Kiro 中工作。</p></div><span class="badge" id="badge">正在检查</span></header>
-<div id="message" role="status" aria-live="polite"></div><div class="grid"><section>
+<div id="message" role="status" aria-live="polite"></div><dialog id="notice" aria-labelledby="noticeText"><div id="noticeBody"><div id="noticeText" role="alert"></div><button id="noticeClose" class="primary">知道了</button></div></dialog><div class="grid"><section>
 <div class="card"><h2><span class="step">1</span>连接中转站</h2>
 <label for="base">Base URL</label><input id="base" type="url" placeholder="https://example.com/v1" autocomplete="off">
 <label for="key">API key</label><input id="key" type="password" placeholder="输入 API key" autocomplete="new-password">
@@ -29,7 +32,12 @@
 <script>
 const token='__TOKEN__', $=id=>document.getElementById(id);let state={}, manual=false;
 async function api(path,body){const response=await fetch('/api/'+path,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json','X-Setup-Token':token},...(body===undefined?{}:{body:JSON.stringify(body)})});const result=await response.json();if(!response.ok)throw Error(result.error||'请求失败');return result}
-function message(text,error=false){$('message').textContent=text;$('message').classList.toggle('error',error);$('message').style.display='block'}
+let toastTimer;
+function message(text,error=false){
+  if(error){$('noticeText').textContent=text;$('notice').showModal();return}
+  $('message').textContent=text;$('message').classList.remove('error');$('message').style.display='block';clearTimeout(toastTimer);toastTimer=setTimeout(()=>{$('message').style.display='none'},5000)
+}
+$('noticeClose').onclick=()=>$('notice').close();
 function defaultEffortModels(ids){return ids.filter(id=>/(?:^|\/)gpt-6(?:[.-]|$)/i.test(id))}
 function showModels(ids,selected=ids){const target=$('models');target.replaceChildren();for(const id of ids){const label=document.createElement('label');label.className='model';const input=document.createElement('input');input.type='checkbox';input.value=id;input.checked=selected.includes(id);input.onchange=defaults;label.append(input,document.createTextNode(id));target.append(label)}defaults();$('efforts').value=defaultEffortModels(selected).join('\n')}
 function selected(){return [...$('models').querySelectorAll('input:checked')].map(x=>x.value)}

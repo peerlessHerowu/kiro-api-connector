@@ -3,6 +3,7 @@ import io
 import shutil
 import tempfile
 import urllib.request
+import urllib.error
 import zipfile
 from pathlib import Path
 
@@ -44,6 +45,15 @@ def update():
 if __name__ == '__main__':
     try:
         update()
+    except urllib.error.HTTPError as error:
+        if error.code == 404:
+            print('GitHub 更新地址返回 HTTP 404：仓库对当前下载请求不可见。请将仓库设为公开，或改用可认证的发布包。')
+        else:
+            print(f'GitHub 下载失败：HTTP {error.code}。')
+        raise SystemExit(1)
+    except urllib.error.URLError as error:
+        print('GitHub 下载失败：' + str(error.reason))
+        raise SystemExit(1)
     except Exception as error:
         print('更新失败：' + str(error))
         raise SystemExit(1)

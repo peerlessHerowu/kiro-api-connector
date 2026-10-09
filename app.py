@@ -504,7 +504,9 @@ class Connector:
         result = subprocess.run([sys.executable, str(updater)], capture_output=True,
                                 timeout=180, creationflags=FLAGS)
         if result.returncode:
-            raise RuntimeError('更新失败，未重启桥接；请检查网络后重试。')
+            detail = (result.stdout or result.stderr or '').strip().splitlines()
+            detail = detail[-1] if detail else '请检查网络或仓库访问权限。'
+            raise RuntimeError('更新失败，未重启桥接：' + detail)
         if self.config:
             self.stop_bridge()
             self.start_bridge()

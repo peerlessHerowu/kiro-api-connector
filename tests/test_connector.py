@@ -34,6 +34,12 @@ class Tests(unittest.TestCase):
                 self.connector.request('https://example.com/v1/models')
             self.assertNotIn('private-secret',str(error.exception))
 
+    def test_update_error_includes_updater_detail(self):
+        self.connector.dependencies=lambda: {'bundled':True}
+        with patch('subprocess.run', return_value=type('Result', (), {'returncode':1, 'stdout':'GitHub 下载失败：HTTP 404。', 'stderr':''})()):
+            with self.assertRaisesRegex(RuntimeError, 'HTTP 404'):
+                self.connector.update()
+
     def test_invalid_model_catalog_has_actionable_error(self):
         self.connector.request=lambda *args,**kwargs: {'data':'not-a-list'}
         with self.assertRaisesRegex(app.InvalidJsonResponse,'模型接口格式'):
