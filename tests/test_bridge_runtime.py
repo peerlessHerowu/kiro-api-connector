@@ -37,6 +37,10 @@ class BridgeRuntimeTest(unittest.TestCase):
                 self.end_headers()
                 if len(requests) == 1:
                     payload = {'choices':[], 'usage':{'prompt_tokens':6896,'completion_tokens':0}}
+                elif any(message.get('content') == 'Call tool' for message in body['messages']):
+                    payload = {'choices':[{'delta':{'tool_calls':[{'index':0,'id':'call_1',
+                        'function':{'name':'lookup','arguments':'{"query":"x"}'}}]},
+                        'finish_reason':'tool_calls'}]}
                 else:
                     started.set(); finish.wait(5)
                     payload = {'choices':[{'delta':{'content':'OK'},'finish_reason':'stop'}],
@@ -79,6 +83,9 @@ class BridgeRuntimeTest(unittest.TestCase):
                     replacement.write_text(json.dumps(config),encoding='utf8')
                     replacement.replace(config_path)
                     self.assertEqual(get('/List-Available-Models')['defaultModel']['modelId'],'changed')
+                    current_catalog = get('/ListAvailableModels')
+                    self.assertEqual([item['modelId'] for item in current_catalog['models']],['changed'])
+                    self.assertEqual(current_catalog['defaultModel']['modelId'],'changed')
                     payload={'conversationState':{'currentMessage':{'userInputMessage':{
                         'content':'[SYSTEM NOTE: automated summarization request] Summarize the supplied conversation.',
                         'modelId':'auto'}}}}
@@ -105,6 +112,44 @@ class BridgeRuntimeTest(unittest.TestCase):
                     percentages=[frame['contextUsagePercentage'] for frame in data if 'contextUsagePercentage' in frame]
                     self.assertAlmostEqual(percentages[-1],6901/500000*100)
                     self.assertEqual(get('/health')['activeRequests'],0)
+                    response_payload = {'model':'changed','instructions':'Be brief.',
+                        'input':[{'role':'user','content':'Reply OK'}], 'stream':True}
+                    request=urllib.request.Request(f'http://127.0.0.1:{port}/v1/responses',
+                        data=json.dumps(response_payload).encode(),
+                        headers={'Content-Type':'application/json'})
+                    with opener.open(request,timeout=10) as response:
+                        self.assertIn('text/event-stream',response.headers['Content-Type'])
+                        events=[json.loads(line[6:]) for line in response.read().decode().splitlines()
+                                if line.startswith('data: ')]
+                    self.assertEqual(requests[-1]['model'],'isolated/changed')
+                    self.assertEqual(requests[-1]['messages'],[
+                        {'role':'system','content':'Be brief.'},
+                        {'role':'user','content':'Reply OK'}])
+                    self.assertEqual(events[0],{'type':'response.output_text.delta','delta':'OK'})
+                    self.assertEqual(events[-1]['type'],'response.completed')
+                    self.assertEqual(events[-1]['response']['status'],'completed')
+                    self.assertEqual(get('/health')['activeRequests'],0)
+                    response_payload.update(input=[{'role':'user','content':'Call tool'}],
+                        tools=[{'type':'function','name':'lookup','description':'Look up a value',
+                                'parameters':{'type':'object','properties':{'query':{'type':'string'}}}}])
+                    request=urllib.request.Request(f'http://127.0.0.1:{port}/v1/responses',
+                        data=json.dumps(response_payload).encode(),
+                        headers={'Content-Type':'application/json'})
+                    with opener.open(request,timeout=10) as response:
+                        events=[json.loads(line[6:]) for line in response.read().decode().splitlines()
+                                if line.startswith('data: ')]
+                    self.assertEqual(requests[-1]['tools'][0]['function']['name'],'lookup')
+                    self.assertEqual(events[0]['type'],'response.output_item.added')
+                    self.assertEqual(events[1]['delta'],'{"query":"x"}')
+                    self.assertEqual(events[-1]['type'],'response.completed')
+                    response_payload['model']='not-configured'
+                    request=urllib.request.Request(f'http://127.0.0.1:{port}/v1/responses',
+                        data=json.dumps(response_payload).encode(),
+                        headers={'Content-Type':'application/json'})
+                    with self.assertRaises(urllib.error.HTTPError) as error:
+                        opener.open(request,timeout=10)
+                    self.assertEqual(error.exception.code,400)
+                    self.assertEqual(len(requests),4)
                 finally:
                     finish.set(); proc.terminate()
                     try: proc.wait(10)

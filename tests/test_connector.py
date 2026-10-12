@@ -61,6 +61,18 @@ class Tests(unittest.TestCase):
                 self.connector.update()
             run.assert_not_called()
 
+    def test_start_bridge_refreshes_moved_router_app(self):
+        self.connector.config={'routerApp':'C:/old-install/app'}
+        app.write_json(self.connector.config_file,self.connector.config)
+        self.connector.start_router=lambda:None
+        self.connector.dependencies=lambda:{'node':'node','routerApp':'D:/current-install/app'}
+        self.connector.spawn=lambda *args:None
+        self.connector.ready=lambda *args:None
+        self.connector.bridge_health=lambda:{'activeRequests':0}
+        with patch.object(app,'free_port',return_value=True):
+            self.connector.start_bridge()
+        self.assertEqual(app.read_json(self.connector.config_file)['routerApp'],'D:/current-install/app')
+
     def test_context_change_does_not_restart_hot_bridge(self):
         old={'nodeId':'n','connectionId':'c','routerKeyId':'k','prefix':'kiro-connector',
              'baseUrl':'https://example.com/v1','models':['m'],'defaultModel':'m',
@@ -186,6 +198,7 @@ class Tests(unittest.TestCase):
     def test_source_export_excludes_private_data_and_dependencies(self):
         spec=importlib.util.spec_from_file_location('export',Path(__file__).parents[1]/'build_source.py')
         export=importlib.util.module_from_spec(spec);spec.loader.exec_module(export)
+        self.assertIn(Path(__file__).parents[1]/'runtime/create_response.cjs',export.source_files())
         root=self.home/'source';root.mkdir()
         for name in export.TOP_LEVEL:(root/name).write_text('source',encoding='utf8')
         for directory in export.DIRECTORIES:

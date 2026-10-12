@@ -31,7 +31,8 @@ def update():
                     target = staging / relative
                     target.parent.mkdir(parents=True, exist_ok=True)
                     target.write_bytes(archive.read(name))
-            required = [staging / 'app.py', staging / 'runtime/kiro_local_bridge.js', staging / 'runtime/context_policy.cjs']
+            required = [staging / 'app.py', staging / 'runtime/kiro_local_bridge.js',
+                        staging / 'runtime/context_policy.cjs', staging / 'runtime/create_response.cjs']
             if not all(path.exists() for path in required):
                 raise RuntimeError('更新包缺少桥接文件，未修改本机文件。')
             for source in staging.rglob('*'):

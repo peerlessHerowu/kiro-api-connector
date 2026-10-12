@@ -440,8 +440,14 @@ class Connector:
             return
         if not free_port(self.bridge_port):
             raise RuntimeError('桥接端口已被其他进程使用。')
+        deps = self.dependencies()
+        if not deps['routerApp']:
+            raise RuntimeError('固定版本 kRouter 依赖不可用。')
+        if self.config.get('routerApp') != deps['routerApp']:
+            self.config['routerApp'] = deps['routerApp']
+            write_json(self.config_file, self.config)
         env = dict(os.environ, KIRO_CONNECTOR_CONFIG=str(self.config_file))
-        self.spawn('bridge', [self.dependencies()['node'], str(ROOT/'runtime/kiro_local_bridge.js')], env)
+        self.spawn('bridge', [deps['node'], str(ROOT/'runtime/kiro_local_bridge.js')], env)
         self.ready(f'http://127.0.0.1:{self.bridge_port}/health', 'bridge')
         self.last_error = None
 

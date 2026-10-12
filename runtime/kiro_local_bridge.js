@@ -1,10 +1,11 @@
-// Local smoke-test adapter for kRouter 0.5.163 and Kiro 1.0.395.
+// Local bridge for pinned kRouter 0.5.163 and Kiro legacy/Responses protocols.
 const http = require('node:http');
 const fs = require('node:fs');
 const Module = require('node:module');
 const { DatabaseSync } = require('node:sqlite');
 const legacyProfile = require('./legacy_profile.cjs');
 const { retryEmptyStream } = require('./empty_stream.cjs');
+const { createResponse } = require('./create_response.cjs');
 
 const path = require('node:path');
 process.env.KIRO_CONNECTOR_CONFIG ||= path.join(__dirname, 'config.json');
@@ -105,7 +106,8 @@ async function start() {
       console.log(`${req.method} ${url.pathname} ${target}`);
       if (url.pathname === '/health') return json(res, 200, { ok: true, activeRequests, hotReload: true });
       Object.assign(config, JSON.parse(fs.readFileSync(process.env.KIRO_CONNECTOR_CONFIG, 'utf8')));
-      if (url.pathname === '/List-Available-Models' || target.includes('ListAvailableModels')) {
+      if (url.pathname === '/List-Available-Models' || url.pathname === '/ListAvailableModels' ||
+          target.includes('ListAvailableModels')) {
         req.resume();
         const models = await getModels();
         return json(res, 200, { models, ...(models.some(m => m.modelId === config.defaultModel)
@@ -119,6 +121,11 @@ async function start() {
         chunks.push(chunk);
       }
       const body = Buffer.concat(chunks);
+      if (url.pathname === '/v1/responses' && req.method === 'POST') {
+        generating = true;
+        activeRequests++;
+        return await createResponse(req, res, JSON.parse(body), config, router, routerKey);
+      }
       if (/generateAssistantResponse/i.test(url.pathname) ||
           target.includes('GenerateAssistantResponse')) {
         const requested = JSON.parse(body).conversationState?.currentMessage?.userInputMessage?.modelId;
