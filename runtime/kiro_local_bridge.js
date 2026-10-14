@@ -6,6 +6,7 @@ const { DatabaseSync } = require('node:sqlite');
 const legacyProfile = require('./legacy_profile.cjs');
 const { retryEmptyStream } = require('./empty_stream.cjs');
 const { createResponse } = require('./create_response.cjs');
+const { selectModel } = require('./model_selection.cjs');
 
 const path = require('node:path');
 process.env.KIRO_CONNECTOR_CONFIG ||= path.join(__dirname, 'config.json');
@@ -129,11 +130,17 @@ async function start() {
       if (/generateAssistantResponse/i.test(url.pathname) ||
           target.includes('GenerateAssistantResponse')) {
         const requested = JSON.parse(body).conversationState?.currentMessage?.userInputMessage?.modelId;
-        const selected = requested && requested !== 'auto' ? requested : config.defaultModel;
-        const [model, legacyEffort] = selected.split('::');
-        if (!(await getModels()).some(item => item.modelId === model)) {
-          return json(res, 400, { message: 'Requested model is not available to this new-api key' });
+        let selection;
+        try { selection = selectModel(requested, config); }
+        catch (error) {
+          const diagnostic = {time:new Date().toISOString(), code:'MODEL_NOT_CONFIGURED',
+            requested: typeof requested === 'string' ? requested.slice(0,200) : null,
+            configured:config.models};
+          console.error('model_rejected=' + JSON.stringify(diagnostic));
+          return json(res, 400, {message:`Model ${JSON.stringify(diagnostic.requested)} is not configured in Kiro API Connector. Select a configured model or add an explicit model mapping in the connector.`, code:diagnostic.code});
         }
+        const {model, effort:legacyEffort} = selection;
+        console.log('model_selected=' + JSON.stringify({time:new Date().toISOString(), requested, model, mapped:selection.mapped}));
         const payload = JSON.parse(body);
         const effort = payload.additionalModelRequestFields?.reasoning?.effort || legacyEffort;
         if (effort && (!config.effortModels.includes(model) || !efforts.includes(effort))) {

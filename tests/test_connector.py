@@ -48,11 +48,14 @@ class Tests(unittest.TestCase):
             {'依赖环境','模型配置','中转站模型目录','Bridge 20149','kRouter 20148','实际推理测试','Kiro endpoint'})
         self.assertNotIn('secret-key',json.dumps(result))
 
-    def test_update_error_includes_updater_detail(self):
+    @unittest.skipUnless(os.name=='nt','Windows managed updates')
+    def test_update_launches_separate_updater_and_records_progress(self):
         self.connector.dependencies=lambda: {'bundled':True}
-        with patch('subprocess.run', return_value=type('Result', (), {'returncode':1, 'stdout':'GitHub 下载失败：HTTP 404。', 'stderr':''})()):
-            with self.assertRaisesRegex(RuntimeError, 'HTTP 404'):
-                self.connector.update()
+        with patch('subprocess.Popen') as spawn:
+            self.assertTrue(self.connector.update()['updateScheduled'])
+            self.assertIn('--managed',spawn.call_args.args[0])
+            self.assertEqual(app.read_json(self.connector.home/'update-status.json')['state'],'running')
+            with self.assertRaisesRegex(RuntimeError,'正在进行'):self.connector.update()
 
     def test_busy_bridge_cannot_be_updated(self):
         self.connector.bridge_health=lambda:{'activeRequests':1}

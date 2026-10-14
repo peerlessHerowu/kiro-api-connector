@@ -150,6 +150,25 @@ class BridgeRuntimeTest(unittest.TestCase):
                         opener.open(request,timeout=10)
                     self.assertEqual(error.exception.code,400)
                     self.assertEqual(len(requests),4)
+                    payload['conversationState']['currentMessage']['userInputMessage']['modelId']='claude-sonnet-4-6'
+                    request=urllib.request.Request(f'http://127.0.0.1:{port}/generateAssistantResponse',
+                        data=json.dumps(payload).encode())
+                    with self.assertRaises(urllib.error.HTTPError) as error:opener.open(request,timeout=10)
+                    rejection=json.load(error.exception)
+                    self.assertEqual(rejection['code'],'MODEL_NOT_CONFIGURED')
+                    self.assertIn('claude-sonnet-4-6',rejection['message'])
+                    self.assertEqual(len(requests),4,'Rejected model must never reach upstream')
+                    config['modelAliases']={'claude-sonnet-4-6':'changed'}
+                    config_path.write_text(json.dumps(config),encoding='utf8')
+                    with opener.open(request,timeout=10) as response:
+                        self.assertEqual(''.join(e.get('content','') for e in verify.events(response.read())),'OK')
+                    self.assertEqual(requests[-1]['model'],'isolated/changed')
+                    payload['conversationState']['currentMessage']['userInputMessage']['modelId']='qdev::changed'
+                    request=urllib.request.Request(f'http://127.0.0.1:{port}/generateAssistantResponse',
+                        data=json.dumps(payload).encode())
+                    with opener.open(request,timeout=10) as response:
+                        self.assertTrue(list(verify.events(response.read())))
+                    self.assertEqual(requests[-1]['model'],'isolated/changed')
                 finally:
                     finish.set(); proc.terminate()
                     try: proc.wait(10)

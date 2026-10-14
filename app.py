@@ -20,6 +20,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import webbrowser
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+from runtime.service_runner import log as lifecycle_log
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = Path(__file__).resolve().parent
@@ -203,13 +205,14 @@ class Connector:
         self.token = secrets.token_urlsafe(32)
 
     def dependencies(self):
-        bundled_node = ROOT / ('runtime/bin/node.exe' if os.name=='nt' else 'runtime/bin/node')
+        engine = Path(os.environ.get('KIRO_CONNECTOR_ENGINE', str(ROOT)))
+        bundled_node = engine / ('runtime/bin/node.exe' if os.name=='nt' else 'runtime/bin/node')
         extra_paths = [Path('/opt/homebrew/bin'),Path('/usr/local/bin')] if sys.platform=='darwin' else []
         node = str(bundled_node) if bundled_node.exists() else shutil.which('node')
         node = node or next((str(p/'node') for p in extra_paths if (p/'node').exists()),None)
         npm = shutil.which('npm.cmd') or shutil.which('npm')
         npm = npm or next((str(p/'npm') for p in extra_paths if (p/'npm').exists()),None)
-        app = ROOT / 'runtime/node_modules/@sifxprime/krouter/app'
+        app = engine / 'runtime/node_modules/@sifxprime/krouter/app'
         if not (app / 'custom-server.js').exists() and npm:
             try:
                 npm_env=dict(os.environ)
@@ -271,6 +274,7 @@ class Connector:
         with (self.home / (name + '.log')).open('ab') as log:
             self.processes[name] = subprocess.Popen(command, env=env, stdout=log, stderr=log,
                                                    creationflags=FLAGS)
+        lifecycle_log(self.home,'child_started',service=name,pid=self.processes[name].pid)
 
     def ready(self, url, name):
         for _ in range(80):
@@ -368,6 +372,10 @@ class Connector:
                 raise ValueError('上下文预算需为 8000 到 2000000 之间的整数 token。')
             if not ids or default not in ids or len(ids)>100 or any(not isinstance(x,str) or not x or len(x)>200 for x in ids):
                 raise ValueError('请选择模型与有效的默认模型，最多100个。')
+            aliases=body.get('modelAliases',self.config.get('modelAliases',{}))
+            if not isinstance(aliases,dict) or len(aliases)>100 or any(
+                    not isinstance(k,str) or not k or len(k)>200 or v not in ids for k,v in aliases.items()):
+                raise ValueError('模型映射需为“请求模型 ID → 已选模型 ID”，最多100项。')
             key = body.get('apiKey') or (self.key() if self.config else '')
             if not key:
                 raise ValueError('请填写 API key。')
@@ -418,7 +426,7 @@ class Connector:
                 created = self.api('/api/keys', {'name':'Kiro API Connector'}, 'POST')
                 router_key = next(x['id'] for x in self.api('/api/keys')['keys'] if x.get('key')==created['key'])
                 self.created.append('/api/keys/' + router_key)
-            config = {'baseUrl':base,'models':ids,'defaultModel':default,'prefix':'kiro-connector',
+            config = {'baseUrl':base,'models':ids,'defaultModel':default,'modelAliases':aliases,'prefix':'kiro-connector',
                       'nodeId':node_id,'connectionId':connection_id,'routerKeyId':router_key,
                       'dataDir':str(self.data),'routerPort':self.router_port,'bridgePort':self.bridge_port,
                       'routerApp':self.dependencies()['routerApp'],
@@ -435,6 +443,8 @@ class Connector:
         if not self.config:
             raise RuntimeError('请先保存连接配置。')
         self.wanted = True
+        if (self.home/'installation/current.json').exists():
+            (self.home/'installation/run-enabled').touch()
         self.start_router()
         if 'bridge' in self.processes and self.processes['bridge'].poll() is None:
             return
@@ -456,9 +466,13 @@ class Connector:
             time.sleep(5)
             with self.lock:
                 if self.wanted and any(proc.poll() is not None for proc in self.processes.values()):
+                    for name,proc in self.processes.items():
+                        if proc.poll() is not None:
+                            lifecycle_log(self.home,'child_exited',service=name,pid=proc.pid,exitCode=proc.returncode)
                     try:
                         self.start_bridge()
-                    except Exception:
+                    except Exception as error:
+                        lifecycle_log(self.home,'child_recovery_failed',errorType=type(error).__name__)
                         self.last_error = '子服务恢复失败，请检查状态并手动启动。'
 
     def stop_bridge(self):
@@ -584,6 +598,7 @@ class Connector:
 
     def stop(self):
         with self.lock:
+            (self.home/'installation/run-enabled').unlink(missing_ok=True)
             self.restore()
             self.wanted = False
             self.stop_bridge()
@@ -593,9 +608,12 @@ class Connector:
             self.last_test = None
             return self.status()
 
-    def shutdown(self):
+    def shutdown(self, for_restart=False):
         """Stop owned services for an update; keep Kiro endpoints and backup."""
         with self.lock:
+            self.require_idle_bridge()
+            if not for_restart:(self.home/'installation/run-enabled').unlink(missing_ok=True)
+            lifecycle_log(self.home,'shutdown_requested')
             self.shutting_down = True
             self.wanted = False
             self.stop_bridge()
@@ -605,6 +623,17 @@ class Connector:
 
     def update(self):
         self.require_idle_bridge()
+        if os.name=='nt':
+            pending=self.home/'update-status.json'
+            current=read_json(pending,{})
+            if current.get('state')=='running' and time.time()-current.get('started',0)<600:
+                raise RuntimeError('更新正在进行，请稍候。')
+            write_json(pending,{'state':'running','started':time.time()})
+            with (self.home/'update.log').open('ab') as output:
+                subprocess.Popen([sys.executable,str(ROOT/'upgrade.py'),'--managed','--home',str(self.home)],
+                    stdout=output,stderr=output,creationflags=FLAGS | (
+                        getattr(subprocess,'CREATE_BREAKAWAY_FROM_JOB',0) if (self.home/'installation/current.json').exists() else 0))
+            return {'updateScheduled':True}
         if not self.dependencies()['bundled']:
             raise RuntimeError('源码目录请执行 git pull --ff-only，再运行 setup.ps1 或 setup.sh。')
         updater = ROOT / 'upgrade.py'
@@ -624,15 +653,26 @@ class Connector:
 
     def status(self):
         return {'configured':bool(self.config),'config':{k:v for k,v in self.config.items()
-                if k in ('baseUrl','models','defaultModel','effortModels','contextBudget')},
+                if k in ('baseUrl','models','defaultModel','effortModels','contextBudget','modelAliases')},
                 'running':{k:p.poll() is None for k,p in self.processes.items()},
                 'enabled':self.backup.exists(),'lastTest':self.last_test,
                 'dashboard':f'http://127.0.0.1:{self.router_port}/dashboard/usage',
                 'dataDir':str(self.home), 'dependencies':self.dependencies(),'lastError':self.last_error,
-                'platform':sys.platform,'autostart':startup_path().exists(),
-                'updateSupported':bool(self.dependencies()['bundled'] and (ROOT/'upgrade.py').exists())}
+                'installRoot':str(ROOT),'activeRequests':self.bridge_health().get('activeRequests',0),
+                'update':read_json(self.home/'update-status.json',{}),
+                'platform':sys.platform,'autostart':startup_path().exists() or (self.home/'installation/task.json').exists(),
+                'updateSupported':bool((os.name=='nt' or self.dependencies()['bundled']) and (ROOT/'upgrade.py').exists())}
 
     def autostart(self, enabled):
+        managed = self.home/'installation/current.json'
+        if os.name=='nt' and managed.exists():
+            from runtime.managed_install import register_task
+            record=read_json(managed)
+            name=register_task(self.home,record['python'],enabled)
+            task=self.home/'installation/task.json'
+            if enabled:write_json(task,{'name':name})
+            else:task.unlink(missing_ok=True)
+            return {'autostart':enabled}
         if sys.platform=='darwin':
             startup=startup_path()
             command=[sys.executable,str(ROOT/'app.py'),'--home',str(self.home),'--no-browser']
@@ -705,7 +745,8 @@ def handler(connector, port):
             if not self.trusted():
                 return self.send(403,{'error':'Host rejected'})
             if self.path=='/health':
-                return self.send(200,{'app':'kiro-api-connector'})
+                return self.send(200,{'app':'kiro-api-connector','release':ROOT.name,
+                    'update':read_json(connector.home/'update-status.json',{})})
             if self.path=='/':
                 page=(ROOT/'web/index.html').read_text(encoding='utf8').replace('__TOKEN__',connector.token)
                 return self.send(200,page.encode(),'text/html')
@@ -731,7 +772,7 @@ def handler(connector, port):
                     elif self.path=='/api/start': connector.start_bridge();result=connector.status()
                     elif self.path=='/api/stop': result=connector.stop()
                     elif self.path=='/api/shutdown':
-                        connector.shutdown(); result={'ok':True}
+                        connector.shutdown(for_restart=body.get('restart') is True); result={'ok':True}
                         threading.Thread(target=self.server.shutdown,daemon=True).start()
                     elif self.path=='/api/autostart': result=connector.autostart(bool(body['enabled']))
                     elif self.path=='/api/update': result=connector.update()
@@ -760,6 +801,7 @@ def main():
     parser.add_argument('--takeover',action='store_true')
     args=parser.parse_args()
     connector=Connector(args.home)
+    lifecycle_log(connector.home,'wizard_start',pid=os.getpid(),root=str(ROOT))
     reenable = False
     try:
         server=LocalServer(('127.0.0.1',args.port),handler(connector,args.port))
@@ -776,7 +818,8 @@ def main():
                 if not args.no_browser:
                     webbrowser.open(f'http://127.0.0.1:{args.port}')
                 return
-        except Exception:
+        except Exception as error:
+            lifecycle_log(connector.home,'startup_failed',errorType=type(error).__name__)
             pass
         raise RuntimeError('配置界面端口已被占用，请检查既有工具实例。') from None
     if connector.config:
@@ -793,9 +836,13 @@ def main():
     try:
         server.serve_forever()
     finally:
+        lifecycle_log(connector.home,'wizard_exit',shutdown=connector.shutting_down)
         server.server_close()
         if not connector.shutting_down:
-            connector.stop()
+            if args.no_browser:
+                connector.shutdown(for_restart=True)
+            else:
+                connector.stop()
 
 
 if __name__=='__main__':
@@ -805,7 +852,7 @@ if __name__=='__main__':
         pass
     except Exception as error:
         message=str(error) if isinstance(error,RuntimeError) else '启动失败（'+type(error).__name__+'），请检查本机配置。'
-        if os.name=='nt':
+        if os.name=='nt' and '--no-browser' not in sys.argv:
             ctypes.windll.user32.MessageBoxW(None,message,'Kiro API Connector',0x10)
         elif sys.stderr:
             print(message,file=sys.stderr)

@@ -59,8 +59,6 @@ if (-not $nodeReady) {
 if ($LASTEXITCODE -ne 0) { throw 'kRouter 依赖安装失败，请查看本机 install.log。' }
 
 Write-Host '正在启动配置向导。已有配置会保留，不会覆盖其他 Kiro 设置。'
-if ($Restart) {
-  & $python app.py --takeover
-} else {
-  & $python app.py
-}
+& $python -c 'import app; from runtime import managed_install as m; m.install(m.ROOT,app.user_paths()[0])'
+if ($LASTEXITCODE -ne 0) { throw '固定安装未完成；现有配置已保留，请查看 lifecycle.log 或 task-register.log。' }
+Start-Process 'http://127.0.0.1:20147/'

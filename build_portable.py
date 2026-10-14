@@ -38,7 +38,7 @@ def build(destination,node,router):
     # Isolated import paths prevent accidentally loading another machine's Python packages.
     version=f'{sys.version_info.major}{sys.version_info.minor}'
     (python/f'python{version}._pth').write_text('.\nLib\nDLLs\n..\n',encoding='utf8')
-    (destination/'打开配置向导.cmd').write_text('@echo off\r\nstart "" "%~dp0python\\pythonw.exe" "%~dp0app.py" --takeover\r\n',encoding='utf8')
+    (destination/'打开配置向导.cmd').write_text('@echo off\r\ncd /d "%~dp0"\r\n"%~dp0python\\python.exe" -c "import app; from runtime import managed_install as m; m.install(m.ROOT,app.user_paths()[0])"\r\nif errorlevel 1 (pause) else (start "" "http://127.0.0.1:20147/")\r\n',encoding='utf8')
     notice='Kiro API Connector portable build.\nIncludes Python (PSF license), Node.js and kRouter 0.5.163 and its dependencies.\nOriginal license files are retained; see python/LICENSE* and runtime/node_modules/@sifxprime/krouter.\nNo Kiro client, credentials or runtime databases are included.\n'
     (destination/'THIRD_PARTY_NOTICES.txt').write_text(notice,encoding='utf8')
     archive=destination.with_name(destination.name+'.zip')

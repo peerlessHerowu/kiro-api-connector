@@ -1,0 +1,11 @@
+'use strict';
+const assert = require('node:assert/strict');
+const {selectModel}=require('../runtime/model_selection.cjs');
+const cfg={models:['gpt-6.1-sol'],defaultModel:'gpt-6.1-sol',modelAliases:{'explicit-agent-model':'gpt-6.1-sol'}};
+assert.equal(selectModel('qdev::gpt-6.1-sol',cfg).model,'gpt-6.1-sol');
+assert.equal(selectModel('qdev::gpt-6.1-sol::high',cfg).effort,'high');
+assert.equal(selectModel('auto',cfg).model,'gpt-6.1-sol');
+assert.equal(selectModel('explicit-agent-model',cfg).mapped,true);
+assert.throws(()=>selectModel('some-other-model',cfg),/not configured/);
+assert.throws(()=>selectModel('gpt-6.1-sol::unsupported',cfg),/not configured/);
+console.log('model selection: namespace, effort, explicit mapping and rejection passed');

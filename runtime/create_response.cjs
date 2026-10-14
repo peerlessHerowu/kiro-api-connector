@@ -1,9 +1,10 @@
 const context = require('./context_policy.cjs');
+const { selectModel } = require('./model_selection.cjs');
 
 function chatRequest(input, config) {
-  if (typeof input?.model !== 'string' || !config.models.includes(input.model)) {
-    throw new Error('Requested model is not configured');
-  }
+  const selection = selectModel(input?.model, config);
+  input = {...input, model:selection.model};
+  if (selection.effort && !input.reasoning?.effort) input.reasoning={effort:selection.effort};
   if (!Array.isArray(input.input)) throw new Error('Expected Responses input array');
   const messages = [];
   if (input.instructions) messages.push({role: 'system', content: input.instructions});
@@ -50,6 +51,8 @@ async function createResponse(req, res, input, config, router, key) {
   let request;
   try { request = chatRequest(input, config); }
   catch (error) {
+    if (error.model) console.error('model_rejected=' + JSON.stringify({time:new Date().toISOString(),
+      code:'MODEL_NOT_CONFIGURED',requested:String(input?.model).slice(0,200),configured:config.models}));
     res.writeHead(400, {'Content-Type': 'application/json'});
     res.end(JSON.stringify({error: {message: error.message, type: 'invalid_request_error'}}));
     return;

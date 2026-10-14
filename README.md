@@ -6,6 +6,18 @@
 
 下载项目提供的 Windows x64 便携包并完整解压，双击 **打开配置向导.cmd**。便携包包含 Python、Node.js 和固定版本 kRouter，无需另外安装这些运行环境，也无需 skill。此 Windows 便携包不能在 Mac 上运行；Mac 用户按下面的源码方式部署。
 
+### Windows 固定安装与恢复
+
+新版便携入口和 `setup.ps1` 会把运行文件安装到 `%LOCALAPPDATA%\KiroApiConnector\installation`，下载或源码目录不再是运行目录。源码用户以后执行 `git pull --ff-only`、`./setup.ps1` 即可应用本地最新代码；托管安装也可点网页“检查更新并应用”，从 GitHub main 获取版本。未提交到 main 的本地改动不会通过网页分发。
+
+Windows 当前用户任务负责登录启动、失败重试和每分钟补启动，正常运行时不重复创建实例。整个主管进程被结束时，Windows Job Object 会结束其子进程，避免遗留占用端口。异常终止后通常一分钟左右恢复；主动停止不会自动复活。任务注册失败会明确报错，不显示为安装成功。
+
+更新先准备独立版本并检查导入和依赖；正在回答时拒绝切换，空闲后切换整个向导与桥接。新版启动或本地服务健康检查失败时恢复上一托管版本；首次迁移失败则尝试重启原目录。健康检查不等于真实模型问答验收。API key、数据库和 Kiro endpoint 备份留在原数据目录。`lifecycle.log` 记录启动、退出码、恢复与版本切换，`startup.log`、`update.log` 保存启动与更新诊断。
+
+### 子代理指定其他模型
+
+Kiro 子代理可能指定与主界面不同的模型。未配置的模型会明确显示请求 ID，并记录 `model_rejected`，这不是中转站 key 权限判定。向导“手动填写模型 / 思考档位”下可填写显式映射，例如 `claude-sonnet-4-6=gpt-6.1-sol`；右侧必须是已选可用模型。映射表示实际调用右侧模型，不会得到左侧模型的能力。主模型与其他未映射模型保持原选择，不会静默兜底。`bridge.log` 的 `model_selected` 记录实际映射结果。
+
 ## macOS 用户
 
 已增加 macOS 路径、后台启动、LaunchAgent 登录自启及打开日志目录支持，适用于源码部署。Apple Silicon 和 Intel 均使用各自系统安装的 Node/Python；当前尚无 Mac 便携包、签名 App 或 DMG，也未完成 Mac 原生 Kiro 的实机验收。
@@ -90,7 +102,7 @@ python build_source.py --output C:\output\kiro-api-connector-source.zip
 
 源码用户不要反复发送压缩包：在项目目录运行 `powershell -ExecutionPolicy Bypass -File .\setup.ps1 -Update`，macOS 运行 `./setup.sh --update`。脚本会先检查工作区干净，再执行 `git pull --ff-only`；更新后会接管旧的本工具向导并启动新代码，已有本机数据、API key、kRouter 数据库和 Kiro 设置会保留。已启用的 Kiro endpoint 会在新桥接通过实际推理测试后继续接管；若测试失败，会保留配置页供手动恢复。没有 `--Update` / `--update` 时，只使用当前目录已有代码，不会自动更新。
 
-源码导出使用文件白名单，不包含本机运行环境、缓存、数据库和凭据。分享原始便携 zip 也可以；接收者在自己电脑填写配置，不需要作者的登录状态或配置文件。不要移动已经注册自启的安装目录，移动后应重新注册。
+源码导出使用文件白名单，不包含本机运行环境、缓存、数据库和凭据。分享原始便携 zip 也可以；接收者在自己电脑填写配置，不需要作者的登录状态或配置文件。Windows 新入口安装成功后运行文件位于 LOCALAPPDATA/KiroApiConnector/installation，下载目录可以移动；macOS 原有自启仍依赖安装目录，移动后应重新注册。
 
 在本机便携 Python/Node/kRouter 中已验证真实推理、6.1 high 档位、默认模型更新、key 保留、服务重启和假 Kiro 设置的启用/恢复。**尚未在另一台干净 Windows 电脑完成原生 IDE 验收**，发布时应保留这个说明。
 
